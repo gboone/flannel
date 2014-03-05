@@ -14,6 +14,10 @@ def get_servers():
 	data = get_config()
 	return data['Servers']
 
+def get_plugins():
+	data = get_config()
+	return data['Plugins']
+
 # Set servers dynamically
 servers = get_servers()
 for s in servers:
@@ -22,6 +26,7 @@ for s in servers:
 	user = servers[s]['user']
 	full_addr = "%s@%s" % (user, address)
 	env.hosts.append(full_addr)
+
 # Actual flannel
 def show_themes(data):
 	config = file(data)
@@ -40,6 +45,17 @@ def check_wp_version(wp_dir):
 	else:
 		upgrade_wordpress(wp_dir, version)
 
+def check_wp_plugins(wp_dir):
+	plugins = get_plugins()
+	for p in plugins:
+		expected = plugins[p]['version']
+		with cd(wp_dir):
+			v = sudo('wp plugin get %s --field=version' % (p))
+		if v == plugins[p]['version']:
+			print('Plugin %s is okay!' %s (p))
+		else:
+			sys.exit('Plugin %s is at the wrong version. Expected %s but was %s' % (p, expected, v ))
+
 def upgrade_wordpress(wp_dir, version):
 	with settings(sudo_user):
 		with cd(wp_dir):
@@ -49,9 +65,7 @@ def check_for_wp_cli(host):
 	servers = get_servers()
 	server = servers[host]['wp-cli']
 	cli = sudo('which wp')
-	if cli == server:
-		print(cli)
-	else:
+	if cli != server:
 		sys.exit('You should install wp-cli, it\'s damn handy.')
 
 def deploy():
@@ -63,4 +77,5 @@ def deploy():
 	wp_dir = data[host]['wordpress']
 	with settings(sudo_user="root"):
 		check_for_wp_cli(host)
-		check_wp_version(wp_dir)	
+		check_wp_version(wp_dir)
+		check_wp_plugins(wp_dir)
