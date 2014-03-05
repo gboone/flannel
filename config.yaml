@@ -1,0 +1,29 @@
+VCS:
+  - name: GitHub
+    url: http://github.com
+    user: username
+    type: git
+  - name: GitHubEnterprise
+    url: http://github.example.com
+    user: username
+    type: git
+Application:
+  - name: WordPress
+    version: 3.8.1
+Plugins:
+  - name: open-graph-control
+    src: GitHub
+    version: 0.1
+Themes:
+  - name: custom-theme
+    src: GitHubEnterprise
+    version: 4.0
+# ---
+# --- !core
+# WordPress Core: { version: 3.8.1 }
+# Plugins:
+#     - Open Graph Control: { VCS: GitHub, version: 0.1 }
+# ...
+# Themes:
+#     - Custom Theme from GHE: { VCS: GitHubEnterprise }
+#     - _s: { VCS: GitHub, version: 1.2, user: Automattic }
