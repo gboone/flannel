@@ -3,9 +3,10 @@
 This is a fabric-based automated deployment tool using a YAML file to store information about your configuration. It is very much a work in progress.
 
 TOC:
-1. Requirements
-2. Your YAML File
-3. Running the deployment
+
+1. [Requirements](#requirements)
+2. [The YAML File](#the-yaml-file)
+3. [Running the deployment](#running-the-deployment)
 
 Requirements
 ------------
