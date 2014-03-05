@@ -18,12 +18,3 @@ Themes:
   - name: custom-theme
     src: GitHubEnterprise
     version: 4.0
-# ---
-# --- !core
-# WordPress Core: { version: 3.8.1 }
-# Plugins:
-#     - Open Graph Control: { VCS: GitHub, version: 0.1 }
-# ...
-# Themes:
-#     - Custom Theme from GHE: { VCS: GitHubEnterprise }
-#     - _s: { VCS: GitHub, version: 1.2, user: Automattic }
