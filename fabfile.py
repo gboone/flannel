@@ -4,6 +4,7 @@ from fabric.contrib.console import confirm
 from sysconfig import *
 import yaml
 
+# Read from YAML
 def get_config():
 	config = file('config.yaml')
 	data = yaml.load(config)
@@ -13,28 +14,15 @@ def get_servers():
 	data = get_config()
 	return data['Servers']
 
+# Set servers dynamically
 servers = get_servers()
 for s in servers:
 	print(s)
-	address = servers[s]['address']
+	address = s
 	user = servers[s]['user']
 	full_addr = "%s@%s" % (user, address)
 	env.hosts.append(full_addr)
-
-def prepare_deploy():
-	local('git add . && git commit')
-	local('git push')
-
-def stash_and_fetch():
-	local('git stash')
-	local('git fetch')
-
-def checkout_updated():
-	local('git checkout origin')
-
-def hello():
-	print("Hello world!")
-
+# Actual flannel
 def show_themes(data):
 	config = file(data)
 	data = yaml.load(config)
@@ -46,23 +34,33 @@ def check_wp_version(wp_dir):
 	with cd(wp_dir):
 		v = sudo('wp core version')
 	config = get_config()
-	if v == config['Application']['WordPress']['version']:
-		v = True
+	version = config['Application']['WordPress']['version'] 
+	if v == version:
+		sys.exit('WordPress is okay!')
 	else:
-		v= False
-	return v
+		upgrade_wordpress(wp_dir, version)
 
-def upgrade_wordpress(wp_dir):
+def upgrade_wordpress(wp_dir, version):
 	with settings(sudo_user):
 		with cd(wp_dir):
-			sudo('wp core upgrade')
+			sudo('wp core update --version=%s --force' % version)
+
+def check_for_wp_cli(host):
+	servers = get_servers()
+	server = servers[host]['wp-cli']
+	cli = sudo('which wp')
+	if cli == server:
+		print(cli)
+	else:
+		sys.exit('You should install wp-cli, it\'s damn handy.')
 
 def deploy():
 	data = get_servers()
-	wp_dir = data['build']['wordpress']
+	host = env.host_string
+	index = host.index('@')
+	index = index + 1
+	host = host[index:]
+	wp_dir = data[host]['wordpress']
 	with settings(sudo_user="root"):
-		v = check_wp_version(wp_dir)
-	if v:
-		sys.exit('WordPress is okay!')
-	else:
-		upgrade_wordpress(wp_dir)
+		check_for_wp_cli(host)
+		check_wp_version(wp_dir)	

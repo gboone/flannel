@@ -19,10 +19,9 @@ Themes:
   custom-theme:
     src: GitHubEnterprise
     version: 4.0
+    state: active
 Servers:
-  localhost:
-    address: 
-    wordpress: /wordpress
-  build:
-    address: 
-    wordpress: /path/to/wordpress
+  hostname:
+    wordpress: /pah/to/wordpress
+    user: username
+    wp-cli: /usr/bin/wp
