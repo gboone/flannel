@@ -1,4 +1,9 @@
+from fabric.api import local
 import yaml
+
+def prepare_deploy():
+	local('git add . && git commit')
+	local('git push')
 
 def hello():
 	print("Hello world!")
