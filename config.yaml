@@ -1,20 +1,28 @@
 VCS:
-  - name: GitHub
+  GitHub:
     url: http://github.com
     user: username
     type: git
-  - name: GitHubEnterprise
+  GitHubEnterprise:
     url: http://github.example.com
     user: username
     type: git
 Application:
-  - name: WordPress
+  WordPress:
     version: 3.8.1
 Plugins:
-  - name: open-graph-control
+  open-graph-control:
     src: GitHub
     version: 0.1
+    method: zip
 Themes:
-  - name: custom-theme
+  custom-theme:
     src: GitHubEnterprise
     version: 4.0
+Servers:
+  localhost:
+    address: 
+    wordpress: /wordpress
+  build:
+    address: 
+    wordpress: /path/to/wordpress
