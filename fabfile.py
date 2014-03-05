@@ -8,7 +8,9 @@ def get_config():
 	config = file('config.yaml', 'r')
 	yaml = yaml.load(config)
 
-def show_themes(yaml):
-	for y in yaml['Themes']:
+def show_themes(data):
+	config = file(data)
+	data = yaml.load(config)
+	for y in data['Themes']:
 		name = y['name']
 		print(name)
