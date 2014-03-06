@@ -6,6 +6,7 @@ TOC:
 
 1. [Requirements](#requirements)
 2. [The YAML File](#the-yaml-file)
+3. [The Fabric File](#the-fabric-file)
 3. [Running the deployment](#running-the-deployment)
 
 Requirements
@@ -31,6 +32,10 @@ The included YAML file is a enough to get you started. There are five main secti
 
 If you have a fairly complicated website, this file can get long.
 
+The fabric file
+---------------
+Better known as `fabfile.py`, the fabric file contains methods that make the final deploy() method go. It is broken into 3 sections: 1. Read from YAML, 2. Set servers dynamically, and 3. 'Actual flannel'. The last section contains the methods that communicate with your server.
+
 Running the deployment
 ----------------------
 
@@ -40,6 +45,8 @@ You can see what's going on behind the scenes in the code, but here's the gist:
 
 1. Grabs some information from the yaml file
 2. Checks for WP-CLI
-3. Checks the WordPress version and upgrades if it is not the same as the config.yaml
+3. Checks the WordPress version and upgrades if it is not the same as the config.yaml (Warning: it uses `wp core update` with `--force` and will go backward if your version is ahead.)
+4. Checks all your plugins and upgrades if they are not at the correct version
+5. Checks all your themes and upgrades if they are not at the correct version
 
 Right now it will try to run deploy() on each server defined in your YAML.
