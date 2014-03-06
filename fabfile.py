@@ -60,65 +60,64 @@ def check_wp_version(wp_dir):
 	else:
 		upgrade_wordpress(wp_dir, version)
 
-def check_wp_plugins(wp_dir):
-	plugins = get_plugins()
-	for p in plugins:
-		import pdb; pdb.set_trace;
-		version = plugins[p]['version']
+def check_wp_extensions(wp_dir, extn):
+	extensions = plugin_or_theme(extn)
+	for p in extensions:
+		version = extensions[p]['version']
 		with cd(wp_dir):
 			try:
-				run('wp plugin is-installed %s' % (p))
-				v = run('wp plugin get %s --field=version' % (p))
+				run('wp %s is-installed %s' % (extn, p))
+				v = run('wp %s get %s --field=version' % (extn, p))
 				if v == version:
-					print('Plugin is okay!')
+					print('%s %s is okay!' % (extn, p))
 				else:
-					upgrade_plugin(wp_dir, version, p)
+					upgrade_extension(wp_dir, version, p, extn)
 			except SystemExit:
-				install_plugin(wp_dir, version, p)
-
-def check_themes(wp_dir):
-	themes = get_themes()
+				install_extension(wp_dir, version, p, extn)
 
 def upgrade_wordpress(wp_dir, version):
 	with settings(sudo_user):
 		with cd(wp_dir):
 			sudo('wp core update --version=%s --force' % version)
 
-def upgrade_plugin(wp_dir, version, p):
-	plugins = get_plugins()
+def upgrade_extension(wp_dir, version, p, extn):
+	extension = plugin_or_theme(extn)
 	with cd(wp_dir):
-		if plugins[p]['src'] == False:
-			run('wp plugin update %s --version=%s' % (p, version))
+		if extension[p]['src'] == False:
+			run('wp %s install %s --version=%s --force' % (extn, p, version))
 		else:
-			install_plugin(wp_dir, version, p)
+			install_extension(wp_dir, version, p, extn)
 
-def install_plugin(wp_dir, version, p):
-	plugins = get_plugins()
-	plugin_dir = '%s/wp-content/plugins' % wp_dir
+def install_extension(wp_dir, version, p, extn):
+	extension = plugin_or_theme(extn)
+	if extn == 'plugin':
+		extension_dir = '%s/wp-content/plugins' % (wp_dir)
+	if extn == 'theme':
+		extension_dir = '%s/wp-content/themes' % (wp_dir)
 	with cd(wp_dir):
-		if plugins[p]['src']:
-			src = plugins[p]['src']
-			full_addr = build_full_addr(src, p, version)
+		if extension[p]['src']:
+			src = extension[p]['src']
+			full_addr = build_full_addr(src, p, version, extn)
 			if full_addr[:4] != '.zip':
 				run('wget %s -O %s.zip' % (full_addr, p))
 			else:
 				run('wget %s -O %s.zip')
-			run('wp plugin install %s.zip' % (p))
-			run('mv %s/%s-%s %s/%s' % (plugin_dir, p, version, plugin_dir, p))
+			run('wp %s install %s.zip' % (extn, p))
+			run('cp -r %s/%s-%s %s/%s' % (extension_dir, p, version, extension_dir, p))
+			run('rm -rf %s/%s-%s' % (extension_dir, p, version))
 			run('rm -rf %s.zip' % (p))
 		else:
-			run('wp plugin install %s' % (p))
-		if plugins[p]['state'] == 'active':
-			run('wp plugin activate %s' % (p))
+			run('wp %s install %s' % (extn, p))
+		if extension[p]['state'] == 'active':
+			run('wp %s activate %s' % (extn, p))
 
-def build_full_addr(src, p, version):
-	plugins = get_plugins()
+def build_full_addr(src, p, version, extn):
+	extension = plugin_or_theme(extn)
 	vcs = get_vcs()
-	import pdb; pdb.set_trace()
-	if plugins[p].has_key('url') is False:
+	if extension[p].has_key('url') is False:
 		vcs_url = vcs[src]['url']
-		if plugins[p].has_key('vcs_user'):
-			vcs_user = plugins[p]['vcs_user']
+		if extension[p].has_key('vcs_user'):
+			vcs_user = extension[p]['vcs_user']
 		else:
 			vcs_user = vcs[src]['user']
 		if vcs[src] == vcs['GitHub']:
@@ -126,8 +125,17 @@ def build_full_addr(src, p, version):
 		elif vcs[src] == vcs['GitHubEnterprise']:
 			full_addr = "%s/%s/%s/zip/%s" % (vcs_url, vcs_user, p, version)
 	else:
-		full_addr = plugins[p]['url']
+		full_addr = extension[p]['url']
 	return full_addr
+
+def plugin_or_theme(extn):
+	if extn == 'plugin':
+		extension = get_plugins()
+	elif extn == 'theme':
+		extension = get_themes()
+	else:
+		sys.exit('Either plugin or theme must be set to True.')
+	return extension
 
 def deploy():
 	data = get_servers()
@@ -138,4 +146,5 @@ def deploy():
 	wp_dir = data[host]['wordpress']
 	check_for_wp_cli(host)
 	check_wp_version(wp_dir)
-	check_wp_plugins(wp_dir)
+	check_wp_extensions(wp_dir, extn = 'plugin')
+	check_wp_extensions(wp_dir, extn = 'theme')
