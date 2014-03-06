@@ -18,6 +18,14 @@ def get_plugins():
 	data = get_config()
 	return data['Plugins']
 
+def get_vcs():
+	data = get_config()
+	return data['VCS']
+
+def get_themes():
+	data = get_config()
+	return data['Themes']
+
 # Set servers dynamically
 servers = get_servers()
 for s in servers:
@@ -28,6 +36,13 @@ for s in servers:
 	env.hosts.append(full_addr)
 
 # Actual flannel
+def check_for_wp_cli(host):
+	servers = get_servers()
+	server = servers[host]['wp-cli']
+	cli = run('which wp')
+	if cli != server:
+		sys.exit('You should install wp-cli, it\'s damn handy.')
+
 def show_themes(data):
 	config = file(data)
 	data = yaml.load(config)
@@ -37,36 +52,82 @@ def show_themes(data):
 
 def check_wp_version(wp_dir):
 	with cd(wp_dir):
-		v = sudo('wp core version')
+		v = run('wp core version')
 	config = get_config()
 	version = config['Application']['WordPress']['version'] 
 	if v == version:
-		sys.exit('WordPress is okay!')
+		run('echo WordPress is okay!')
 	else:
 		upgrade_wordpress(wp_dir, version)
 
 def check_wp_plugins(wp_dir):
 	plugins = get_plugins()
 	for p in plugins:
-		expected = plugins[p]['version']
+		import pdb; pdb.set_trace;
+		version = plugins[p]['version']
 		with cd(wp_dir):
-			v = sudo('wp plugin get %s --field=version' % (p))
-		if v == plugins[p]['version']:
-			print('Plugin %s is okay!' %s (p))
-		else:
-			sys.exit('Plugin %s is at the wrong version. Expected %s but was %s' % (p, expected, v ))
+			try:
+				run('wp plugin is-installed %s' % (p))
+				v = run('wp plugin get %s --field=version' % (p))
+				if v == version:
+					print('Plugin is okay!')
+				else:
+					upgrade_plugin(wp_dir, version, p)
+			except SystemExit:
+				install_plugin(wp_dir, version, p)
+
+def check_themes(wp_dir):
+	themes = get_themes()
 
 def upgrade_wordpress(wp_dir, version):
 	with settings(sudo_user):
 		with cd(wp_dir):
 			sudo('wp core update --version=%s --force' % version)
 
-def check_for_wp_cli(host):
-	servers = get_servers()
-	server = servers[host]['wp-cli']
-	cli = sudo('which wp')
-	if cli != server:
-		sys.exit('You should install wp-cli, it\'s damn handy.')
+def upgrade_plugin(wp_dir, version, p):
+	plugins = get_plugins()
+	with cd(wp_dir):
+		if plugins[p]['src'] == False:
+			run('wp plugin update %s --version=%s' % (p, version))
+		else:
+			install_plugin(wp_dir, version, p)
+
+def install_plugin(wp_dir, version, p):
+	plugins = get_plugins()
+	plugin_dir = '%s/wp-content/plugins' % wp_dir
+	with cd(wp_dir):
+		if plugins[p]['src']:
+			src = plugins[p]['src']
+			full_addr = build_full_addr(src, p, version)
+			if full_addr[:4] != '.zip':
+				run('wget %s -O %s.zip' % (full_addr, p))
+			else:
+				run('wget %s -O %s.zip')
+			run('wp plugin install %s.zip' % (p))
+			run('mv %s/%s-%s %s/%s' % (plugin_dir, p, version, plugin_dir, p))
+			run('rm -rf %s.zip' % (p))
+		else:
+			run('wp plugin install %s' % (p))
+		if plugins[p]['state'] == 'active':
+			run('wp plugin activate %s' % (p))
+
+def build_full_addr(src, p, version):
+	plugins = get_plugins()
+	vcs = get_vcs()
+	import pdb; pdb.set_trace()
+	if plugins[p].has_key('url') is False:
+		vcs_url = vcs[src]['url']
+		if plugins[p].has_key('vcs_user'):
+			vcs_user = plugins[p]['vcs_user']
+		else:
+			vcs_user = vcs[src]['user']
+		if vcs[src] == vcs['GitHub']:
+			full_addr = "%s/%s/%s/archive/%s.zip" % ( vcs_url, vcs_user, p, version)
+		elif vcs[src] == vcs['GitHubEnterprise']:
+			full_addr = "%s/%s/%s/zip/%s" % (vcs_url, vcs_user, p, version)
+	else:
+		full_addr = plugins[p]['url']
+	return full_addr
 
 def deploy():
 	data = get_servers()
@@ -75,7 +136,6 @@ def deploy():
 	index = index + 1
 	host = host[index:]
 	wp_dir = data[host]['wordpress']
-	with settings(sudo_user="root"):
-		check_for_wp_cli(host)
-		check_wp_version(wp_dir)
-		check_wp_plugins(wp_dir)
+	check_for_wp_cli(host)
+	check_wp_version(wp_dir)
+	check_wp_plugins(wp_dir)
