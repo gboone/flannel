@@ -50,3 +50,23 @@ You can see what's going on behind the scenes in the code, but here's the gist:
 5. Checks all your themes and upgrades if they are not at the correct version
 
 Right now it will try to run deploy() on each server defined in your YAML.
+
+Add a vagrant box as a server
+----------------------------
+
+If you're looking to use fabric to deploy to a vagrant box, you'll need to use an ssh config file and force fab to use it.
+
+1. `cd your/vagrant/home`
+2. `vagrant ssh-config`
+3. `vim ~/.ssh/config`
+4. Copy the output from 2 into 3
+
+Make sure you have a Server in your YAML set to the HostName in your ssh config file. It should look something like
+
+```yaml
+Servers:
+  HostName:
+    wordpress: /pah/to/wordpress
+    user: vagrant
+    wp-cli: /path/to/wp
+```
