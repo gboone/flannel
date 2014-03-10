@@ -33,6 +33,8 @@ for s in servers:
 	address = s
 	user = servers[s]['user']
 	full_addr = "%s@%s" % (user, address)
+	if servers[s].has_key('port'):
+		full_addr += ':%s' % servers[s]['port']
 	env.hosts.append(full_addr)
 
 # Actual flannel
@@ -42,13 +44,6 @@ def check_for_wp_cli(host):
 	cli = run('which wp')
 	if cli != server:
 		sys.exit('You should install wp-cli, it\'s damn handy.')
-
-def show_themes(data):
-	config = file(data)
-	data = yaml.load(config)
-	for y in data['Themes']:
-		name = y['name']
-		print(name)
 
 def check_wp_version(wp_dir):
 	with cd(wp_dir):
@@ -61,55 +56,96 @@ def check_wp_version(wp_dir):
 		upgrade_wordpress(wp_dir, version)
 
 def check_wp_extensions(wp_dir, extn):
-	extensions = plugin_or_theme(extn)
-	for p in extensions:
-		version = extensions[p]['version']
+	extension = plugin_or_theme(extn)
+	for p in extension:
+		root_dir = "%s/wp-content/%ss" % (wp_dir, extn)
+		if extension[p].has_key('nickname'):
+			n = extension[p]['nickname']
+			extension_dir = "%s/%s" % (root_dir, n)
+		else:
+			extension_dir = "%s/%s" % (root_dir, p)
+		version = extension[p]['version']
 		with cd(wp_dir):
 			try:
 				run('wp %s is-installed %s' % (extn, p))
-				v = run('wp %s get %s --field=version' % (extn, p))
-				if v == version:
-					print('%s %s is okay!' % (extn, p))
-				else:
-					upgrade_extension(wp_dir, version, p, extn)
 			except SystemExit:
-				install_extension(wp_dir, version, p, extn)
+				install_extension(wp_dir, version, p, extn, extension_dir)
+			v = run('wp %s get %s --field=version' % (extn, p))
+			if v == version:
+				print('%s %s is okay!' % (extn, p))
+			elif version == 'master':
+				with cd("%s/wp-content/%ss/%s" % (wp_dir, extn, p)):
+					run("git pull origin %s" % (version))
+			elif v > version:
+				downgrade_extension(wp_dir, version, p, extn, extension_dir)
+			else:
+				upgrade_extension(wp_dir, version, p, extn, extension_dir)
+			activate_extension(extn, p)
+
+def activate_extension(extn, p):
+	run('wp %s activate %s' % (extn, p))
 
 def upgrade_wordpress(wp_dir, version):
-	with settings(sudo_user):
+	with settings(sudo_user='root'):
 		with cd(wp_dir):
 			sudo('wp core update --version=%s --force' % version)
 
-def upgrade_extension(wp_dir, version, p, extn):
+def upgrade_extension(wp_dir, version, p, extn, extension_dir):
 	extension = plugin_or_theme(extn)
 	with cd(wp_dir):
 		if extension[p]['src'] == False:
-			run('wp %s install %s --version=%s --force' % (extn, p, version))
+			url = 'http://downloads.wordpress.org'
+			run('wp %s install %s/%s/%s.%s.zip' % (extn, url, extn, p, version))
+			# run('wp %s install %s --version=%s --force' % (extn, p, version))
 		else:
-			install_extension(wp_dir, version, p, extn)
+			if extension[p].has_key('nickname'):
+				p = extension[p]['nickname']
+			with cd("%s/%s" % (extension_dir, p)):
+				run('git fetch origin')
+				run('git checkout origin/%s' % version)
+				# install_extension(wp_dir, version, p, extn)
 
-def install_extension(wp_dir, version, p, extn):
+def downgrade_extension(wp_dir, version, p, extn, extension_dir):
 	extension = plugin_or_theme(extn)
-	if extn == 'plugin':
-		extension_dir = '%s/wp-content/plugins' % (wp_dir)
-	if extn == 'theme':
-		extension_dir = '%s/wp-content/themes' % (wp_dir)
 	with cd(wp_dir):
-		if extension[p]['src']:
+		if extension[p]['src'] == False:
+			url = 'http://downloads.wordpress.org'
+			run('wp %s deactivate %s' % (extn, p))
+			run('wp %s uninstall %s' % (extn, p))
+			run('wp %s install %s/%s/%s.%s.zip' % (extn, url, extn, p, version))
+
+def install_extension(wp_dir, version, p, extn, extension_dir):
+	extension = plugin_or_theme(extn)
+	if extension[p]['src'] != False:
+		with cd('%s/wp-content/%ss' % (wp_dir, extn)):
 			src = extension[p]['src']
-			full_addr = build_full_addr(src, p, version, extn)
-			if full_addr[:4] != '.zip':
-				run('wget %s -O %s.zip' % (full_addr, p))
-			else:
-				run('wget %s -O %s.zip')
-			run('wp %s install %s.zip' % (extn, p))
-			run('cp -r %s/%s-%s %s/%s' % (extension_dir, p, version, extension_dir, p))
-			run('rm -rf %s/%s-%s' % (extension_dir, p, version))
-			run('rm -rf %s.zip' % (p))
-		else:
+			git_clone(extn, p, src)
+			with cd(extension_dir):
+				run('git fetch origin')
+				run('git checkout origin/%s' % (version))
+	else:
+		with cd(wp_dir):
 			run('wp %s install %s' % (extn, p))
-		if extension[p]['state'] == 'active':
-			run('wp %s activate %s' % (extn, p))
+
+def git_clone(extn, p, src):
+	extension = plugin_or_theme(extn)
+	vcs = get_vcs()
+	if extension[p].has_key('vcs_user'):
+		origin = extension[p]['vcs_user']
+		upstream = vcs[src]['user']
+	else:
+		origin = vcs[src]['user']
+	url = vcs[src]['url']
+	if extension[p].has_key('nickname'):
+		nick = extension[p]['nickname']
+		run('git clone %s/%s/%s.git %s' % (url, origin, p, nick))
+	else:
+		run('git clone %s/%s/%s.git' % (url, origin, p))
+	if upstream is not None:
+		try:
+			run('git remote add upstream %s/%s/%s.git' % (url, upstream, p))
+		except SystemExit:
+			pass
 
 def build_full_addr(src, p, version, extn):
 	extension = plugin_or_theme(extn)
@@ -142,7 +178,11 @@ def deploy():
 	host = env.host_string
 	index = host.index('@')
 	index = index + 1
-	host = host[index:]
+	port = host.find(':')
+	if port > -1 < len(host):
+		host = host[index:port]
+	else:
+		host = host[index:]
 	wp_dir = data[host]['wordpress']
 	check_for_wp_cli(host)
 	check_wp_version(wp_dir)
