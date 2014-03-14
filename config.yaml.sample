@@ -1,0 +1,27 @@
+VCS:
+  GitHub:
+    url: http://github.com
+    user: username
+    type: git
+  GitHubEnterprise:
+    url: http://github.example.com
+    user: username
+    type: git
+Application:
+  WordPress:
+    version: 3.8.1
+Plugins:
+  open-graph-control:
+    src: GitHub
+    version: 0.1
+    method: zip
+Themes:
+  custom-theme:
+    src: GitHubEnterprise
+    version: 4.0
+    state: active
+Servers:
+  hostname:
+    wordpress: /pah/to/wordpress
+    user: username
+    wp-cli: /usr/bin/wp
