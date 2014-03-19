@@ -2,6 +2,7 @@ from fabric.api import *
 from fabric.contrib.console import confirm
 from sysconfig import *
 import yaml
+import os
 
 # Read from YAML
 def get_config():
@@ -96,11 +97,13 @@ def upgrade_extension(wp_dir, version, p, extn, extension_dir):
       url = 'http://wordpress.org'
       run('wp %s install %s/%s/%s.%s.zip' % (extn, url, extn, p, version))
     else:
-      with cd("%s/%s" % (extension_dir, p)):
+      with cd(extension_dir):
         if is_git_repo() == False:
-          add_git_remotes(p)
-        run('git fetch origin')
-        run('git checkout origin/%s' % version)
+          set_git_remotes(p)
+        run('git stash')
+        import pdb; pdb.set_trace()
+        run('git fetch origin %s' % (version))
+        run('git checkout origin/%s' % (version))
         # install_extension(wp_dir, version, p, extn)
 
 def downgrade_extension(wp_dir, version, p, extn, extension_dir):
@@ -192,6 +195,13 @@ def plugin_or_theme(extn):
 def deploy():
   data = get_servers()
   host = env.host_string
+  if host[:7] == 'vagrant':
+  	env.user = 'vagrant'
+  	env.password = 'vagrant'
+  	env.host_string = '127.0.0.1'
+  else:
+	key = '%s_pass' % ( host )
+	env.password = os.environ[key]
   index = host.index('@')
   index = index + 1
   port = host.find(':')
