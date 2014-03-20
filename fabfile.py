@@ -1,5 +1,6 @@
 from fabric.api import *
 from fabric.contrib.console import confirm
+from fabric.colors import red
 from sysconfig import *
 import yaml
 import os
@@ -63,21 +64,22 @@ def check_wp_version(wp_dir):
 def check_wp_extensions(wp_dir, extn):
   extension = plugin_or_theme(extn)
   for p in extension:
-    root_dir = "%s/wp-content/%ss" % (wp_dir, extn)
-    extension_dir = "%s/%s" % (root_dir, p)
-    version = extension[p]['version']
     with cd(wp_dir):
+      extn_path = run('wp %s path %s' % (extn, p))
+      extn_index = extn_path.rfind('/')
+      extn_dir = extn_path[:extn_index]
+      version = extension[p]['version']
       try:
         run('wp %s is-installed %s' % (extn, p))
       except SystemExit:
-        install_extension(wp_dir, version, p, extn, extension_dir)
+        install_extension(wp_dir, version, p, extn, extn_dir)
       v = run('wp %s get %s --field=version' % (extn, p))
       if str(v) == str(version):
         print('%s %s is okay!' % (extn, p))
       elif v > version:
-        downgrade_extension(wp_dir, version, p, extn, extension_dir)
+        downgrade_extension(wp_dir, version, p, extn, extn_dir)
       else:
-        upgrade_extension(wp_dir, version, p, extn, extension_dir)
+        upgrade_extension(wp_dir, version, p, extn, extn_dir)
       if extn == 'theme':
         if run('wp option get template') == p:
           active = 'active'
@@ -86,102 +88,61 @@ def check_wp_extensions(wp_dir, extn):
       if str(active) != 'active':
         run('wp %s activate %s' % (extn, p))
 
-def upgrade_wordpress(wp_dir, version):
-  with cd(wp_dir):
-    sudo('wp core update --version=%s --force' % version)
+def install_wordpress(version, host):
+  try:
+    sudo('wp core download --version=%s --allow-root' % (version))
+    print('WordPress installed successfully, moving on to configuration.')
+  except SystemExit:
+    print(red('WordPress failed to install!'))
+  config = get_servers()
+  wp_config = config[host]['wp-config']
+  extra_config = config[host]['extra-config']
+  try:
+    sudo('cp %s wp-config.php' % (wp_config))
+    sudo('cp -R %s configurations' % (extra_config))
+    sudo('chmod -R +x configurations')
+    sudo('find . -iname \*.php | xargs chmod +x')
+    print('WordPress fully configured.')
+  except SystemExit:
+    print(red('WordPress was not properly configured!'))
 
-def upgrade_extension(wp_dir, version, p, extn, extension_dir):
+def install_extension(extn, host):
   extension = plugin_or_theme(extn)
-  with cd(wp_dir):
-    if extension[p].has_key('src') == False:
-      url = 'http://wordpress.org'
-      run('wp %s install %s/%s/%s.%s.zip' % (extn, url, extn, p, version))
+  failures = []
+  for p in extension:
+    v = extension[p]['version']
+    if extension[p]['src'] != False:
+      with cd('wp-content/%ss' % (extn)):
+        src = extension[p]['src']
+        try:
+          git_clone(extn, p, src)
+        except SystemExit:
+          pass
+        try:
+          with cd(p):
+            sudo('git stash')
+            sudo('git fetch origin')
+            sudo('git checkout origin/%s' % (v))
+        except SystemExit:
+          print(red('Failed to update %s' % p))
+          failures.append(p)
     else:
-      with cd(extension_dir):
-        if is_git_repo() == False:
-          set_git_remotes(p)
-        run('git stash')
-        import pdb; pdb.set_trace()
-        run('git fetch origin %s' % (version))
-        run('git checkout origin/%s' % (version))
-        # install_extension(wp_dir, version, p, extn)
-
-def downgrade_extension(wp_dir, version, p, extn, extension_dir):
-  extension = plugin_or_theme(extn)
-  with cd(wp_dir):
-    if extension[p].has_key('src') == False:
-      url = 'http://wordpress.org'
-      if extn != 'theme':
-        run('wp %s deactivate %s' % (extn, p))
-        run('wp %s uninstall %s' % (extn, p))
-      run('wp %s install %s/%s/%s.%s.zip' % (extn, url, extn, p, version))
-
-def install_extension(wp_dir, version, p, extn, extension_dir):
-  extension = plugin_or_theme(extn)
-  if extension[p].has_key('src'):
-    with cd('%s/wp-content/%ss' % (wp_dir, extn)):
-      src = extension[p]['src']
-      git_clone(extn, p, src)
-      with cd(extension_dir):
-        run('git fetch origin')
-        run('git checkout origin/%s' % (version))
-  else:
-    with cd(wp_dir):
-      run('wp %s install %s' % (extn, p))
+      with cd('wp-content/%ss' % (extn)):
+        try:
+          sudo('svn co --force http://plugins.svn.wordpress.org/%s/tags/%s/ %s' % (p, v, p))
+        except SystemExit:
+          failures.append(p)
+  return failures
 
 def git_clone(extn, p, src):
   extension = plugin_or_theme(extn)
   vcs = get_vcs()
   if extension[p].has_key('vcs_user'):
     origin = extension[p]['vcs_user']
-    upstream = vcs[src]['user']
   else:
     origin = vcs[src]['user']
   url = vcs[src]['url']
-  run('git clone git@%s:%s/%s.git' % (url, origin, p))
-  if upstream is not None:
-    try:
-      run('git remote add upstream %s/%s/%s.git' % (url, upstream, p))
-    except SystemExit:
-      pass
-
-def is_git_repo():
-  try:
-    run('git status')
-    return True
-  except SystemExit:
-    return False
-
-def set_git_remotes(p, extn):
-  extension = get_plugin_or_theme(extn)
-  src = extension[p]['src']
-  vcs = get_vcs()
-  url = vcs[src]['url']
-  if extension[p].has_key('vcs_user'):
-    origin = extension[p]['vcs_user']
-    upstream = vcs[src]['user']
-  else:
-    origin = vcs[src]['user']
-  run("git remote add origin git@%s:%s/%s" % (url, origin, p))
-  if upstream:
-    run("git remote add upstream git@%s:%s/%s" % (url, upstream, p))
-
-def build_full_addr(src, p, version, extn):
-  extension = plugin_or_theme(extn)
-  vcs = get_vcs()
-  if extension[p].has_key('url') is False:
-    vcs_url = vcs[src]['url']
-    if extension[p].has_key('vcs_user'):
-      vcs_user = extension[p]['vcs_user']
-    else:
-      vcs_user = vcs[src]['user']
-    if vcs[src] == vcs['GitHub']:
-      full_addr = "%s/%s/%s/archive/%s.zip" % ( vcs_url, vcs_user, p, version)
-    elif vcs[src] == vcs['GitHubEnterprise']:
-      full_addr = "%s/%s/%s/zip/%s" % (vcs_url, vcs_user, p, version)
-  else:
-    full_addr = extension[p]['url']
-  return full_addr
+  sudo('git clone %s/%s/%s.git' % (url, origin, p))
 
 def plugin_or_theme(extn):
   if extn == 'plugin':
@@ -193,7 +154,7 @@ def plugin_or_theme(extn):
   return extension
 
 def deploy():
-  data = get_servers()
+  servers = get_servers()
   host = env.host_string
   if host[:7] == 'vagrant':
   	env.user = 'vagrant'
@@ -209,15 +170,33 @@ def deploy():
     host = host[index:port]
   else:
     host = host[index:]
-  wp_dir = data[host]['wordpress']
+  wp_dir = servers[host]['wordpress']
   wp_cli = check_for_wp_cli(host)
   themes = get_themes()
   plugins = get_plugins()
-  sudoer = data[host]['sudo_user']
+  config = get_config()
+  sudoer = servers[host]['sudo_user']
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
-    check_wp_version(wp_dir)
-    if plugins is not None:
-      check_wp_extensions(wp_dir, extn = 'plugin')
-
-    if themes is not None:
-      check_wp_extensions(wp_dir, extn = 'theme')
+    sudo('cp -R %s /tmp/build' % wp_dir)
+    with cd('/tmp/build'):
+      wp_version = config['Application']['WordPress']['version']
+      try:
+        install_wordpress(wp_version, host)
+      except SystemExit:
+        pass
+      if plugins is not None:
+        import pdb; pdb.set_trace()
+        plugins_f = install_extension(extn = 'plugin', host = host)
+      if themes is not None:
+        themes_f = install_extension(extn = 'theme', host=host)
+  failures = plugins_f + themes_f
+  if len(failures) > 0:
+    print(red('The following extensions failed to update:'))
+    for f in failures:
+      print(f)
+  else:
+    puts('All done, ready to copy!')
+    sudo('cp -R /tmp/build %s' % wp_dir)
+    # with cd(wp_dir):
+    #   toggle_extensions()
+    sudo('rm -rf /tmp/build')
