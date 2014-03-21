@@ -1,6 +1,6 @@
 from fabric.api import *
 from fabric.contrib.console import confirm
-from fabric.colors import red
+from fabric.colors import red, cyan
 from sysconfig import *
 import yaml
 import os
@@ -73,20 +73,13 @@ def check_wp_extensions(wp_dir, extn):
         run('wp %s is-installed %s' % (extn, p))
       except SystemExit:
         install_extension(wp_dir, version, p, extn, extn_dir)
-      v = run('wp %s get %s --field=version' % (extn, p))
+      v = run('wp %s get %s --field=version --allow-root' % (extn, p))
       if str(v) == str(version):
         print('%s %s is okay!' % (extn, p))
       elif v > version:
         downgrade_extension(wp_dir, version, p, extn, extn_dir)
       else:
         upgrade_extension(wp_dir, version, p, extn, extn_dir)
-      if extn == 'theme':
-        if run('wp option get template') == p:
-          active = 'active'
-      else:
-        active = run('wp plugin get %s --field=status' % (p))
-      if str(active) != 'active':
-        run('wp %s activate %s' % (extn, p))
 
 def install_wordpress(version, host):
   try:
@@ -96,10 +89,9 @@ def install_wordpress(version, host):
     print(red('WordPress failed to install!'))
   config = get_servers()
   wp_config = config[host]['wp-config']
-  extra_config = config[host]['extra-config']
   try:
-    sudo('cp %s wp-config.php' % (wp_config))
-    sudo('cp -R %s configurations' % (extra_config))
+    sudo('cp -R %s configurations' % (wp_config))
+    sudo('mv configurations/wp-config.php wp-config.php')
     sudo('chmod -R +x configurations')
     sudo('find . -iname \*.php | xargs chmod +x')
     print('WordPress fully configured.')
@@ -127,12 +119,37 @@ def install_extension(extn, host):
           print(red('Failed to update %s' % p))
           failures.append(p)
     else:
-      with cd('wp-content/%ss' % (extn)):
+      try:
+        sudo('wp %s is-installed %s --allow-root' % (extn, p))
+        if v != sudo('wp %s get %s --field=version' % (extn, p)):
+          puts(cyan('Plugin not installed at correct version, reinstalling'))
+          sys.exit(1)
+      except SystemExit:
+        path = sudo('wp %s path %s --allow-root' % (extn, p))
+        index = path.rfind('/')
+        path = path[:index]
+        sudo('rm -rf %s' % path)
+        if extn == 'plugin':
+          url = 'http://downloads.wordpress.org/plugin/%s.%s.zip' % (p , v)
+        elif extn == 'theme':
+          url = 'http://wordpress.org/themes/download/%s.%s.zip' % (p, v)
         try:
-          sudo('svn co --force http://plugins.svn.wordpress.org/%s/tags/%s/ %s' % (p, v, p))
+          sudo('wp %s install %s --allow-root' % (extn, url))
         except SystemExit:
+          puts(red('Failed to update %s' % p))
           failures.append(p)
   return failures
+
+def activate_extensions(extn):
+  extension = plugin_or_theme(extn)
+  for p in extension:
+    if extn == 'theme':
+        if sudo('wp option get template --allow-root') == p:
+          active = 'active'
+    else:
+      active = sudo('wp plugin get %s --field=status --allow-root' % (p))
+    if str(active) != 'active':
+      sudo('wp %s activate %s --allow-root' % (extn, p))
 
 def git_clone(extn, p, src):
   extension = plugin_or_theme(extn)
@@ -161,8 +178,12 @@ def deploy():
   	env.password = 'vagrant'
   	env.host_string = '127.0.0.1'
   else:
-	key = '%s_pass' % ( host )
-	env.password = os.environ[key]
+    key = '%s_pass' % ( host )
+    try:
+      env.password = os.environ[key]
+    except:
+      pass
+  import pdb; pdb.set_trace()
   index = host.index('@')
   index = index + 1
   port = host.find(':')
@@ -177,7 +198,10 @@ def deploy():
   config = get_config()
   sudoer = servers[host]['sudo_user']
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
-    sudo('cp -R %s /tmp/build' % wp_dir)
+    try:
+      sudo('cp -R %s /tmp/build' % wp_dir)
+    except SystemExit:
+      sudo('mkdir /tmp/build')
     with cd('/tmp/build'):
       wp_version = config['Application']['WordPress']['version']
       try:
@@ -185,7 +209,6 @@ def deploy():
       except SystemExit:
         pass
       if plugins is not None:
-        import pdb; pdb.set_trace()
         plugins_f = install_extension(extn = 'plugin', host = host)
       if themes is not None:
         themes_f = install_extension(extn = 'theme', host=host)
@@ -193,10 +216,14 @@ def deploy():
   if len(failures) > 0:
     print(red('The following extensions failed to update:'))
     for f in failures:
-      print(f)
+      puts(red(f))
   else:
     puts('All done, ready to copy!')
-    sudo('cp -R /tmp/build %s' % wp_dir)
+    with cd('/tmp/build/'):
+      sudo('cp -RfT . %s' % wp_dir)
     # with cd(wp_dir):
     #   toggle_extensions()
     sudo('rm -rf /tmp/build')
+    with cd(wp_dir):
+      activate_extensions(extn='pluign')
+      activate_extensions(extn='theme')
