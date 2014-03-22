@@ -2,26 +2,47 @@ VCS:
   GitHub:
     url: http://github.com
     user: username
-    type: git
   GitHubEnterprise:
     url: http://github.example.com
     user: username
-    type: git
 Application:
   WordPress:
     version: 3.8.1
 Plugins:
   open-graph-control:
     src: GitHub
-    version: 0.1
-    method: zip
+    vcs_user: gboone
+    version: master
+    state: active
+  akismet:
+    src: False
+    version: 2.6
+    state: active
+  custom-plugin:
+    src: GitHubEnterprise
+    version: 1.0
+    state: active
 Themes:
-  custom-theme:
+  child-theme:
     src: GitHubEnterprise
     version: 4.0
     state: active
+  twentyfourteen:
+    src: False
+    version: 1.0
+    state: inactive
 Servers:
   hostname:
     wordpress: /pah/to/wordpress
     user: username
     wp-cli: /usr/bin/wp
+    wp-config: /path/to/wp-config
+    port: 2202
+    sudo_user: apache
+  vagrant:
+    wordpress: /path/to/WordPress
+    user: vagrant
+    wp-cli: /usr/bin/wp
+    wp-config: /path/to/wp-config
+    port: 2222
+    sudo_user: root
