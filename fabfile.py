@@ -82,21 +82,28 @@ def check_wp_extensions(wp_dir, extn):
         upgrade_extension(wp_dir, version, p, extn, extn_dir)
 
 def install_wordpress(version, host):
-  try:
-    sudo('wp core download --version=%s --allow-root' % (version))
-    print('WordPress installed successfully, moving on to configuration.')
-  except SystemExit:
-    print(red('WordPress failed to install!'))
+  v = sudo('wp core version --allow-root')
+  if version == v:
+    puts(cyan('WordPress is okay!'))
+  else:
+    try:
+      sudo('wp core update --version=%s --force --allow-root')
+      # sudo('wp core download --version=%s --allow-root' % (version))
+      print('WordPress installed successfully, moving on to configuration.')
+    except SystemExit:
+      print(red('WordPress failed to update!'))
+      sys.exit(1)
   config = get_servers()
   wp_config = config[host]['wp-config']
   try:
     sudo('cp -R %s configurations' % (wp_config))
-    sudo('mv configurations/wp-config.php wp-config.php')
+    # sudo('mv configurations/wp-config.php wp-config.php') # This is failing right now...
     sudo('chmod -R +x configurations')
     sudo('find . -iname \*.php | xargs chmod +x')
     print('WordPress fully configured.')
   except SystemExit:
     print(red('WordPress was not properly configured!'))
+    sys.exit(1)
 
 def install_extension(extn, host):
   extension = plugin_or_theme(extn)
@@ -183,7 +190,6 @@ def deploy():
       env.password = os.environ[key]
     except:
       pass
-  import pdb; pdb.set_trace()
   index = host.index('@')
   index = index + 1
   port = host.find(':')
