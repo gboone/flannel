@@ -230,5 +230,5 @@ def deploy():
     #   toggle_extensions()
     sudo('rm -rf /tmp/build')
     with cd(wp_dir):
-      activate_extensions(extn='pluign')
+      activate_extensions(extn='plugin')
       activate_extensions(extn='theme')
