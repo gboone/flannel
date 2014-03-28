@@ -1,5 +1,6 @@
 from fabric.api import *
 from fabric.contrib.console import confirm
+from fabric.contrib import files
 from fabric.colors import red, cyan
 from sysconfig import *
 import yaml
@@ -113,10 +114,8 @@ def install_extension(extn, host):
     if extension[p]['src'] != False:
       with cd('wp-content/%ss' % (extn)):
         src = extension[p]['src']
-        try:
+        if(not files.exists(p, use_sudo=True)):
           git_clone(extn, p, src)
-        except SystemExit:
-          pass
         try:
           with cd(p):
             sudo('git stash')
@@ -231,5 +230,5 @@ def deploy():
     #   toggle_extensions()
     sudo('rm -rf /tmp/build')
     with cd(wp_dir):
-      activate_extensions(extn='pluign')
+      activate_extensions(extn='plugin')
       activate_extensions(extn='theme')
