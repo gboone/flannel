@@ -8,6 +8,7 @@ VCS:
 Application:
   WordPress:
     version: 3.8.1
+    settings: http://git.example.com/user/wp-settings-repo.git
 Plugins:
   open-graph-control:
     src: GitHub
