@@ -5,6 +5,7 @@ from fabric.colors import red, cyan
 from sysconfig import *
 import yaml
 import os
+import datetime
 
 # Read from YAML
 def get_config():
@@ -31,16 +32,43 @@ def get_themes():
   data = get_config()
   return data['Themes']
 
-  # Set servers dynamically
-  # servers = get_servers()
-  # for s in servers:
-  #   print(s)
-  #   address = s
-  #   user = servers[s]['user']
-  #   full_addr = "%s@%s" % (user, address)
-  #   if servers[s].has_key('port'):
-  #     full_addr += ':%s' % servers[s]['port']
-  #   env.hosts.append(full_addr)
+def get_host():
+  host = env.host_string
+  if host[:7] == 'vagrant':
+    env.user = 'vagrant'
+    env.password = 'vagrant'
+    env.host_string = '127.0.0.1'
+  else:
+    key = '%s_pass' % ( host )
+    try:
+      env.password = os.environ[key]
+    except:
+      pass
+  index = host.index('@')
+  index = index + 1
+  port = host.find(':')
+  if port > -1 < len(host):
+    host = host[index:port]
+  else:
+    host = host[index:]
+  return host
+
+def get_settings():
+  settings = file('settings.yaml')
+  import pdb; pdb.set_trace()
+  data = yaml.load(settings)
+  return data
+
+# Set servers dynamically
+# servers = get_servers()
+# for s in servers:
+#   print(s)
+#   address = s
+#   user = servers[s]['user']
+#   full_addr = "%s@%s" % (user, address)
+#   if servers[s].has_key('port'):
+#     full_addr += ':%s' % servers[s]['port']
+#   env.hosts.append(full_addr)
 
 # Actual flannel
 def check_for_wp_cli(host):
@@ -176,26 +204,35 @@ def plugin_or_theme(extn):
     sys.exit('Either plugin or theme must be set to True.')
   return extension
 
+def export_settings():
+  data = get_settings()
+  config = get_config()
+  host = get_host()
+  sudoer = servers[host]['sudo_user']
+  wp = servers[host]['wordpress']
+  wp_cli = check_for_wp_cli(host)
+  settings_url = config['Application']['WordPress']['settings']
+  if (not files.exists('/tmp/wp-settings')):
+    run('mkdir /tmp/wp-settings')
+  with cd('/tmp/wp-settings'):
+    import pdb; pdb.set_trace()
+    if (not files.exists('.git')):
+      run('git init')
+      run('git remote add origin %s' % (settings_url))
+    else:
+      run('git pull origin master')
+
+  with settings(path=wp_cli, behavior='append', sudo_user=sudoer), cd(wp):
+    for d in data:
+      run('wp option get %s --format=json > /tmp/wp-settings/%s.json' % (d, d))
+  with (cd('/tmp/wp-settings')):
+    run('git add .')
+    run('git commit -a -m "Settings update: %s"' % (datetime.date.today()))
+    run('git push origin master')
+
 def deploy():
   servers = get_servers()
-  host = env.host_string
-  if host[:7] == 'vagrant':
-  	env.user = 'vagrant'
-  	env.password = 'vagrant'
-  	env.host_string = '127.0.0.1'
-  else:
-    key = '%s_pass' % ( host )
-    try:
-      env.password = os.environ[key]
-    except:
-      pass
-  index = host.index('@')
-  index = index + 1
-  port = host.find(':')
-  if port > -1 < len(host):
-    host = host[index:port]
-  else:
-    host = host[index:]
+  host = get_host()
   environment = servers[host]['environment']
   wp_dir = servers[host]['wordpress']
   wp_cli = check_for_wp_cli(host)
