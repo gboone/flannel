@@ -31,16 +31,20 @@ def get_themes():
   data = get_config()
   return data['Themes']
 
-# Set servers dynamically
-servers = get_servers()
-for s in servers:
-  print(s)
-  address = s
-  user = servers[s]['user']
-  full_addr = "%s@%s" % (user, address)
-  if servers[s].has_key('port'):
-    full_addr += ':%s' % servers[s]['port']
-  env.hosts.append(full_addr)
+  # Set servers dynamically
+  # servers = get_servers()
+  # for s in servers:
+  #   print(s)
+  #   address = s
+  #   user = servers[s]['user']
+  #   full_addr = "%s@%s" % (user, address)
+  #   if servers[s].has_key('port'):
+  #     full_addr += ':%s' % servers[s]['port']
+  #   env.hosts.append(full_addr)
+
+def get_environment():
+    data = get_config()
+    return data['Environment']
 
 # Actual flannel
 def check_for_wp_cli(host):
@@ -52,35 +56,35 @@ def check_for_wp_cli(host):
   else:
     return server
 
-def check_wp_version(wp_dir):
-  with cd(wp_dir):
-    v = run('wp core version')
-  config = get_config()
-  version = config['Application']['WordPress']['version'] 
-  if v == version:
-    puts('WordPress is okay!')
-  else:
-    upgrade_wordpress(wp_dir, version)
-
-def check_wp_extensions(wp_dir, extn):
-  extension = plugin_or_theme(extn)
-  for p in extension:
-    with cd(wp_dir):
-      extn_path = run('wp %s path %s' % (extn, p))
-      extn_index = extn_path.rfind('/')
-      extn_dir = extn_path[:extn_index]
-      version = extension[p]['version']
-      try:
-        run('wp %s is-installed %s' % (extn, p))
-      except SystemExit:
-        install_extension(wp_dir, version, p, extn, extn_dir)
-      v = run('wp %s get %s --field=version --allow-root' % (extn, p))
-      if str(v) == str(version):
-        print('%s %s is okay!' % (extn, p))
-      elif v > version:
-        downgrade_extension(wp_dir, version, p, extn, extn_dir)
-      else:
-        upgrade_extension(wp_dir, version, p, extn, extn_dir)
+# def check_wp_version(wp_dir, environment):
+#   with cd(wp_dir):
+#     v = run('wp core version')
+#   config = get_config()
+#   version = config['Application']['WordPress']['version'][environment]
+#   if v == version:
+#     puts('WordPress is okay!')
+#   else:
+#     upgrade_wordpress(wp_dir, version)
+#
+# def check_wp_extensions(wp_dir, extn, environment):
+#   extension = plugin_or_theme(extn)
+#   for p in extension:
+#     with cd(wp_dir):
+#       extn_path = run('wp %s path %s' % (extn, p))
+#       extn_index = extn_path.rfind('/')
+#       extn_dir = extn_path[:extn_index]
+#       version = extension[p]['version'][environment]
+#       try:
+#         run('wp %s is-installed %s' % (extn, p))
+#       except SystemExit:
+#         install_extension(wp_dir, version, p, extn, extn_dir)
+#       v = run('wp %s get %s --field=version --allow-root' % (extn, p))
+#       if str(v) == str(version):
+#         print('%s %s is okay!' % (extn, p))
+#       elif v > version:
+#         downgrade_extension(wp_dir, version, p, extn, extn_dir)
+#       else:
+#         upgrade_extension(wp_dir, version, p, extn, extn_dir)
 
 def install_wordpress(version, host):
   v = sudo('wp core version --allow-root')
@@ -106,11 +110,11 @@ def install_wordpress(version, host):
     print(red('WordPress was not properly configured!'))
     sys.exit(1)
 
-def install_extension(extn, host):
+def install_extension(extn, host, environment):
   extension = plugin_or_theme(extn)
   failures = []
   for p in extension:
-    v = extension[p]['version']
+    v = extension[p]['version'][environment]
     if extension[p]['src'] != False:
       with cd('wp-content/%ss' % (extn)):
         src = extension[p]['src']
@@ -177,6 +181,7 @@ def plugin_or_theme(extn):
   return extension
 
 def deploy():
+  environment = get_environment()
   servers = get_servers()
   host = env.host_string
   if host[:7] == 'vagrant':
@@ -208,15 +213,15 @@ def deploy():
     except SystemExit:
       sudo('mkdir /tmp/build')
     with cd('/tmp/build'):
-      wp_version = config['Application']['WordPress']['version']
+      wp_version = config['Application']['WordPress']['version'][environment]
       try:
         install_wordpress(wp_version, host)
       except SystemExit:
         pass
       if plugins is not None:
-        plugins_f = install_extension(extn = 'plugin', host = host)
+        plugins_f = install_extension(extn='plugin', host=host, environment=environment)
       if themes is not None:
-        themes_f = install_extension(extn = 'theme', host=host)
+        themes_f = install_extension(extn='theme', host=host, environment=environment)
   failures = plugins_f + themes_f
   if len(failures) > 0:
     print(red('The following extensions failed to update:'))
