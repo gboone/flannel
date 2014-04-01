@@ -42,10 +42,6 @@ def get_themes():
   #     full_addr += ':%s' % servers[s]['port']
   #   env.hosts.append(full_addr)
 
-def get_environment():
-    data = get_config()
-    return data['Environment']
-
 # Actual flannel
 def check_for_wp_cli(host):
   servers = get_servers()
@@ -181,7 +177,6 @@ def plugin_or_theme(extn):
   return extension
 
 def deploy():
-  environment = get_environment()
   servers = get_servers()
   host = env.host_string
   if host[:7] == 'vagrant':
@@ -201,6 +196,7 @@ def deploy():
     host = host[index:port]
   else:
     host = host[index:]
+  environment = servers[host]['environment']
   wp_dir = servers[host]['wordpress']
   wp_cli = check_for_wp_cli(host)
   themes = get_themes()
