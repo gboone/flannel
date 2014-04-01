@@ -7,12 +7,16 @@ VCS:
     user: username
 Application:
   WordPress:
-    version: 3.8.1
+    version:
+      dev: 3.8.1
+      prod: 3.8.1
 Plugins:
   open-graph-control:
     src: GitHub
     vcs_user: gboone
-    version: master
+    version:
+      dev: master
+      prod: master
     state: active
   akismet:
     src: False
@@ -20,19 +24,26 @@ Plugins:
     state: active
   custom-plugin:
     src: GitHubEnterprise
-    version: 1.0
+    version:
+      dev: 1.0
+      prod: 1.0
     state: active
 Themes:
   child-theme:
     src: GitHubEnterprise
-    version: 4.0
+    version:
+      dev: 4.0
+      prod: 4.0
     state: active
   twentyfourteen:
     src: False
-    version: 1.0
+    version:
+      dev: 1.0
+      prod: 1.0
     state: inactive
 Servers:
   hostname:
+    environment: dev
     wordpress: /pah/to/wordpress
     user: username
     wp-cli: /usr/bin/wp
@@ -40,6 +51,7 @@ Servers:
     port: 2202
     sudo_user: apache
   vagrant:
+    environment: dev
     wordpress: /path/to/WordPress
     user: vagrant
     wp-cli: /usr/bin/wp
