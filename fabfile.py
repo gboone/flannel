@@ -1,7 +1,7 @@
 from fabric.api import *
 from fabric.contrib.console import confirm
 from fabric.contrib import files
-from fabric.colors import red, cyan
+from fabric.colors import red, cyan, green
 from sysconfig import *
 import yaml
 import os
@@ -34,28 +34,30 @@ def get_themes():
 
 def get_host():
   host = env.host_string
+  import pdb; pdb.set_trace()
   if host[:7] == 'vagrant':
     env.user = 'vagrant'
     env.password = 'vagrant'
     env.host_string = '127.0.0.1'
+    host = 'vagrant'
+  elif host.find('@') > -1:
+    index = host.index('@')
+    index = index + 1
+    port = host.find(':')
+    if port > -1 < len(host):
+      host = host[index:port]
+    else:
+      host = host[index:]
   else:
     key = '%s_pass' % ( host )
     try:
       env.password = os.environ[key]
     except:
-      pass
-  index = host.index('@')
-  index = index + 1
-  port = host.find(':')
-  if port > -1 < len(host):
-    host = host[index:port]
-  else:
-    host = host[index:]
+      puts(green('No password provided.'))
   return host
 
 def get_settings():
   settings = file('settings.yaml')
-  import pdb; pdb.set_trace()
   data = yaml.load(settings)
   return data
 
@@ -166,28 +168,105 @@ def plugin_or_theme(extn):
 def export_settings():
   data = get_settings()
   config = get_config()
+  servers = get_servers()
   host = get_host()
   sudoer = servers[host]['sudo_user']
   wp = servers[host]['wordpress']
   wp_cli = check_for_wp_cli(host)
   settings_url = config['Application']['WordPress']['settings']
+  nick = servers[host]['nickname']
   if (not files.exists('/tmp/wp-settings')):
-    run('mkdir /tmp/wp-settings')
+    with cd('/tmp/'):
+      sudo('git clone %s wp-settings' % settings_url)
   with cd('/tmp/wp-settings'):
-    import pdb; pdb.set_trace()
-    if (not files.exists('.git')):
-      run('git init')
-      run('git remote add origin %s' % (settings_url))
-    else:
-      run('git pull origin master')
+    try:
+      sudo('git pull origin %s' % nick)
+    except:
+      puts(red('Could not reach the origin server.'))
 
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer), cd(wp):
     for d in data:
-      run('wp option get %s --format=json > /tmp/wp-settings/%s.json' % (d, d))
-  with (cd('/tmp/wp-settings')):
-    run('git add .')
-    run('git commit -a -m "Settings update: %s"' % (datetime.date.today()))
-    run('git push origin master')
+      sudo('wp option get %s --format=json > /tmp/wp-settings/%s.json --allow-root' % (d, d))
+  with settings(sudo_user=sudoer), cd('/tmp/wp-settings'):
+    sudo('git config core.fileMode 0')
+    if (not files.exists('.git/refs/heads/%s' % nick) ):
+      sudo('git checkout -b %s' % nick)
+    else:
+      sudo('git checkout %s' % nick)
+    sudo('git add .')
+    sudo('git commit -a -m "Settings update: %s"' % (datetime.date.today()))
+    try:
+      sudo('git push origin %s' % nick)
+    except:
+      puts(red('Could not communicate with origin server'))
+
+def update_settings(setting='all'):
+  host = get_host()
+  servers = get_servers()
+  sudoer = servers[host]['sudo_user']
+  nick = servers[host]['nickname']
+  wp_dir = servers[host]['wordpress']
+  if not setting == 'all':       # if we're only updating some settings, parse
+    targets = setting.split(',') # the parameter as a tuple
+  else:
+    targets = get_settings() # if we're updating all the settings, grab them all
+  with settings(sudo_user=sudoer), cd('/tmp/wp-settings/'):
+    sudo('git checkout %s' % nick)
+  s_counter = 0
+  updated = []
+  for t in targets:
+    name = '/tmp/wp-settings/%s.json' % t
+    if files.exists(name):
+      with cd(wp_dir):
+        current = sudo('wp option get %s --format=json --allow-root' % t)
+        expected = sudo('cat %s' % name)
+        if current == expected:
+          puts(green('%s did not change!') % (t))
+        else:
+          sudo('wp option update %s --format=json --allow-root < %s' % (t, name))
+          puts(cyan('%s was %s and is now %s' % (t, current, expected)))
+          s_counter += 1
+          updated.append(t)
+    else:
+      puts(red('%s cannot be updated with this method.' % t))
+      puts(red('Either the JSON does not exist, or it is an invalid option.'))
+  if s_counter > 0:
+    puts(cyan('%i options updated successfully.' % s_counter))
+    puts('Options updated:')
+    for u in updated:
+      puts(cyan(u))
+  else:
+    puts(cyan('No options updated!'))
+
+def migrate_settings(target):
+  # Migrate this server's settings to another environment
+  config = get_config()
+  servers = get_servers()
+  host = get_host()
+  sudoer = servers[host]['sudo_user']
+  nick = servers[host]['nickname']
+  settings_url = config['Application']['WordPress']['settings']
+  puts(cyan('It is recommended you export settings from %s first.' % nick))
+  if not target:
+    sys.exit(red('How am I supposed to migrate if I don\'t know to go?'))
+  with settings(sudo_user=sudoer), cd('/tmp/wp-settings'):
+    try:
+      sudo('git fetch origin')
+    except:
+      puts(red('The origin server could not be reached.'))
+    if files.exists('.git/refs/heads/%s' % target):
+      sudo('git checkout %s' %  target)
+      try:
+        sudo('git merge origin/%s %s' % (nick, target))
+      except:
+        puts(red('The origin server could not be reached.'))
+    else:
+      sudo('git checkout -b %s origin/%s' % (target, nick))
+    try:
+      sudo('git push origin %s' % target)
+    except SystemExit:
+      puts(red('The origin server could not be reached.'))
+    sudo('git checkout %s' % nick)
 
 def deploy():
   servers = get_servers()
