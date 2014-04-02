@@ -59,17 +59,6 @@ def get_settings():
   data = yaml.load(settings)
   return data
 
-# Set servers dynamically
-# servers = get_servers()
-# for s in servers:
-#   print(s)
-#   address = s
-#   user = servers[s]['user']
-#   full_addr = "%s@%s" % (user, address)
-#   if servers[s].has_key('port'):
-#     full_addr += ':%s' % servers[s]['port']
-#   env.hosts.append(full_addr)
-
 # Actual flannel
 def check_for_wp_cli(host):
   servers = get_servers()
@@ -79,36 +68,6 @@ def check_for_wp_cli(host):
     sys.exit('You should install wp-cli, it\'s damn handy.')
   else:
     return server
-
-# def check_wp_version(wp_dir, environment):
-#   with cd(wp_dir):
-#     v = run('wp core version')
-#   config = get_config()
-#   version = config['Application']['WordPress']['version'][environment]
-#   if v == version:
-#     puts('WordPress is okay!')
-#   else:
-#     upgrade_wordpress(wp_dir, version)
-#
-# def check_wp_extensions(wp_dir, extn, environment):
-#   extension = plugin_or_theme(extn)
-#   for p in extension:
-#     with cd(wp_dir):
-#       extn_path = run('wp %s path %s' % (extn, p))
-#       extn_index = extn_path.rfind('/')
-#       extn_dir = extn_path[:extn_index]
-#       version = extension[p]['version'][environment]
-#       try:
-#         run('wp %s is-installed %s' % (extn, p))
-#       except SystemExit:
-#         install_extension(wp_dir, version, p, extn, extn_dir)
-#       v = run('wp %s get %s --field=version --allow-root' % (extn, p))
-#       if str(v) == str(version):
-#         print('%s %s is okay!' % (extn, p))
-#       elif v > version:
-#         downgrade_extension(wp_dir, version, p, extn, extn_dir)
-#       else:
-#         upgrade_extension(wp_dir, version, p, extn, extn_dir)
 
 def install_wordpress(version, host):
   v = sudo('wp core version --allow-root')
