@@ -51,8 +51,8 @@ Servers:
     wp-config: /path/to/wp-config
     port: 2202
     sudo_user: apache
-  vagrant:
-    environment: dev
+  127.0.0.1:
+    environment: vagrant
     wordpress: /path/to/WordPress
     user: vagrant
     wp-cli: /usr/bin/wp

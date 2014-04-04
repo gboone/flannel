@@ -12,7 +12,7 @@ TOC:
 Requirements
 ------------
 
-Flannel requires python 2.7, pyyaml, and fabric.
+_Flannel_ requires python 2.7, pyyaml, and fabric.
 
 1. Clone this repo (or your fork)
 2. `mkvirtualenv flannel`
@@ -37,6 +37,7 @@ Example server entry:
 ```yaml
 Servers:
     1.1.1.1:
+        environment: env-name
         wordpress: /var/www
         wp-config: /home/gboone/wp-config
         user: gboone
@@ -56,18 +57,19 @@ VCS:
         user: gboone
 ```
 
-- Application: The only application supported by flannel so far is WordPress, and the only field so far is version. There may be others as Flannel develops.
+- Application: The only application supported by _Flannel_ so far is WordPress, and the only field so far is version. There may be others as _Flannel_ develops.
 
 ```yaml
 Application:
     WordPress:
-        version: 3.8.1
+        version:
+            env-name: 3.8.1
 ```
 
 - Themes: names of themes that should be loaded as they are named by WordPress. For example the Twenty Fourteen theme is loaded with 'twentyfourteen'. Keys for each theme include:
     - version: this can either be a numeric version for themes in the WordPress theme repository or a branch if loading from a VCS 
     - src: which VCS to find them in, set this to false if loading from the WP theme repository
-    - state: if set to active, will mark this as the active theme for your site. You should have multiple themes here if you use a child theme. If more than one theme is set to active, the last one flannel iterates through will be loaded.
+    - state: if set to active, will mark this as the active theme for your site. You should have multiple themes here if you use a child theme. If more than one theme is set to active, the last one _Flannel_ iterates through will be loaded.
     - vcs_user: if a different user than the default for that VCS owns this theme, you can override it with this key
 
 Example theme entry:
@@ -75,7 +77,8 @@ Example theme entry:
 Themes:
     twentyfourteen:
         src: False
-        version: 1.0
+        version:
+            env-name: 1.0
         state: active
 ```
 
@@ -85,7 +88,7 @@ If you have a fairly complicated website, this file can get long.
 
 The fabric file
 ---------------
-Better known as `fabfile.py`, the fabric file contains methods that make the final deploy() method go. It is broken into 3 sections: 1. Read from YAML, 2. Set servers dynamically, and 3. 'Actual flannel'. The last section contains the methods that communicate with your server.
+Better known as `fabfile.py`, the fabric file contains methods that make the final deploy() method go. It is broken into 3 sections: 1. Read from YAML, 2. Set servers dynamically, and 3. `Actual flannel`. The last section contains the methods that communicate with your server.
 
 Running the deployment
 ----------------------
@@ -103,27 +106,42 @@ You can see what's going on behind the scenes in the code, but here's the gist:
 3. Checks the WordPress version and upgrades if it is not the same as the config.yaml (Warning: it uses `wp core update` with `--force` and will go backward if your version is ahead.)
 4. Checks all your plugins and upgrades if they are not at the correct version
 5. Checks all your themes and upgrades if they are not at the correct version
-6. If everything is successful, it will copy back to your WordPress directory and delete /tmp/build, otherwise it will failout and leave the /tmp in place in case you want to inspect things
+6. If everything is successful, it will copy back to your WordPress directory, delete /tmp/build, and activate all plugins that are supposed to be active. IF it fails it will leave /tmp/build in place in case you want to inspect things. Definitely delete this when you're done or it might screw up your next deployment.
 
 Right now it will try to run deploy() on each server defined in your YAML. Everything is done in the /tmp/build directory up until a successful build. If there are any problems connecting to vcs  servers, installing plugins, etc. it will fail and leave your current build untouched.
 
 Add a vagrant box as a server
 ----------------------------
 
-If you're looking to use fabric to deploy to a vagrant box, you'll need to use an ssh config file and force fab to use it.
+_Flannel_ has a few tasks available to vagrant boxes. They are: `deploy`, `export_settings`, `update_settings`, and `migrate_settings`. _Flannel_ will use the `~/.ssh/config` file to parse out how to connect to your vagrant box. Just make sure you have a Server in `config.yaml` set to whatever `vagrant ssh-config` tells you is Host and then set all the other appropriate parameters. Fabric and _Flannel_ takes care of the rest.
 
-1. `cd your/vagrant/home`
-2. `vagrant ssh-config`
-3. `vim ~/.ssh/config`
-4. Copy the output from 2 into 3
+Example:
 
-Make sure you have a Server in your YAML set to the HostName in your ssh config file. It should look something like
+Given the following ssh-config:
+
+```bash
+$ vagrant ssh-config
+Host default
+  HostName 127.0.0.1
+  User vagrant
+  Port 2222
+  UserKnownHostsFile /dev/null
+  StrictHostKeyChecking no
+  PasswordAuthentication no
+  IdentityFile "/path/to/.vagrant.d/insecure_private_key"
+  IdentitiesOnly yes
+  LogLevel FATAL
+```
+
+Make an entry in config.yaml like this:
 
 ```yaml
 Servers:
-  HostName:
+  default:
+    environment: dev
     wordpress: /pah/to/wordpress
     user: vagrant
+    wp-config: /var/www/config
+    sudo_user: root
     wp-cli: /path/to/wp
-    config: /var/www/config
 ```
