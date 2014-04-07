@@ -26,6 +26,7 @@ The included YAML file is a enough to get you started. There are five main secti
 
 - Servers: each key in this section should correspond to the address for your server. Inside each server, you need to supply a few values:
     - user: the name of the user you log in to the server as
+    - environment: a name for the version-set you will apply to this server
     - sudo_user: the name of the user commands should run as
     - wordpress: the fully qualified path to your wordpress install, eg., `/var/www/`
     - wp-config: the fully qualified path to the directory containing a wp-config.php file that already exists on your server, eg., `/var/www/wp-config`, you can also put any other configuration files in here, these will go into a directory called `configurations` relative to the root of your WordPress install
@@ -46,7 +47,7 @@ Servers:
         port: 2202
 ```
 
-- VCS: for any version control systems you're using. Fields here include url, username. Some day we will support other vcs's but for now it's git-only.
+- VCS: for any version control systems you're using. Fields here include url, username. Some day we will support other vcs's but for now only git repos may be used.
 
 Example VCS entry:
 
@@ -57,7 +58,7 @@ VCS:
         user: gboone
 ```
 
-- Application: The only application supported by _Flannel_ so far is WordPress, and the only field so far is version. There may be others as _Flannel_ develops.
+- Application: The only application supported by _Flannel_ so far is WordPress, and the only field so far is version. Specify environment versions under the version key.
 
 ```yaml
 Application:
@@ -108,7 +109,7 @@ You can see what's going on behind the scenes in the code, but here's the gist:
 5. Checks all your themes and upgrades if they are not at the correct version
 6. If everything is successful, it will copy back to your WordPress directory, delete /tmp/build, and activate all plugins that are supposed to be active. IF it fails it will leave /tmp/build in place in case you want to inspect things. Definitely delete this when you're done or it might screw up your next deployment.
 
-Right now it will try to run deploy() on each server defined in your YAML. Everything is done in the /tmp/build directory up until a successful build. If there are any problems connecting to vcs  servers, installing plugins, etc. it will fail and leave your current build untouched.
+By default it will try to run deploy() on each server defined in your YAML. If you want to specify a server, use the standard `fab -H <server>` to do that. Use the server names from config.yaml. If there are any problems connecting to vcs  servers, installing plugins, etc. it will fail and leave your current build untouched.
 
 Add a vagrant box as a server
 ----------------------------

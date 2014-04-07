@@ -72,11 +72,10 @@ def hello():
 def check_for_wp_cli(host):
   servers = get_servers()
   server = servers[host]['wp-cli']
-  
   if server is None:
-    sys.exit('You should install wp-cli, it\'s damn handy.')
-  else:
-    return server
+    sys.exit(red('No wp-cli specified in config.yaml. Please add the path to wp for this server.'))
+  if not files.exists(server):
+    sys.exit(red('WP does not exist in the %s directory. Please install wp-cli, it\'s damn handy!' % server))
 
 def install_wordpress(version, host):
   v = sudo('wp core version --allow-root')
@@ -293,13 +292,14 @@ def deploy():
   plugins = get_plugins()
   config = get_config()
   sudoer = servers[host]['sudo_user']
+  if servers[host]['no_deploy'] == True:
+    return sys.exit(red('Not allowed to deploy to this environment.'))
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     try:
       sudo('cp -R %s /tmp/build' % wp_dir)
     except SystemExit:
       sudo('mkdir /tmp/build')
     with cd('/tmp/build'):
-      import pdb; pdb.set_trace()
       wp_version = config['Application']['WordPress']['version'][environment]
       try:
         install_wordpress(wp_version, host)
