@@ -149,6 +149,7 @@ def install_extension(extn, host):
       with cd('wp-content/%ss' % (extn)):
         src = extension[p]['src']
         if(not files.exists(p, use_sudo=True)):
+          puts(cyan("Cloning %s" % p))
           git_clone(extn, p, src)
         try:
           with cd(p):
@@ -213,6 +214,7 @@ def git_clone(extn, p, src):
   else:
     origin = vcs[src]['user']
   url = vcs[src]['url']
+  puts(cyan("[%s] vcs_user: %s" % (p, origin)))
   sudo('git clone %s/%s/%s.git' % (url, origin, p))
 
 def plugin_or_theme(extn):
@@ -349,10 +351,11 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
   failures = []
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     try:
-      sudo('cp -R %s /tmp/build' % wp_dir)
+      sudo('cp -R %s /mnt/local/tmp/build' % wp_dir)
     except SystemExit:
-      sudo('mkdir /tmp/build')
-    with cd('/tmp/build/wordpress'):
+      sudo('mkdir -p /mnt/local/tmp/build')
+      sudo('cp -R %s /mnt/local/tmp/build' % wp_dir)
+    with cd('/mnt/local/tmp/build/wordpress'):
       if wp_version != 'latest':
         wp_version = config['Application']['WordPress']['version']  
       install_wordpress(wp_version, host)
@@ -370,11 +373,12 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
       puts(red(f))
   else:
     puts('All done, ready to copy!')
-    with cd('/tmp/build/'):
+    with cd('/mnt/local/tmp/build/wordpress'):
       sudo('cp -RfT . %s' % wp_dir)
     # with cd(wp_dir):
     #   toggle_extensions()
-    sudo('rm -rf /tmp/build')
+    
+    #sudo('rm -rf /mnt/local/tmp/build')
     with cd(wp_dir):
       activate_extensions(extn='plugin')
       activate_extensions(extn='theme')
