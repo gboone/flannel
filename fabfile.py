@@ -21,10 +21,9 @@ def get_config():
   data = yaml.load(config)
   return data
 
-def get_roles():
+def get_servers():
   data = get_config()
-  roles = data['Roles']
-  return roles
+  return data['Servers']
 
 def get_plugins():
   data = get_config()
@@ -49,6 +48,26 @@ def get_current_role(host):
       return r
     except:
       pass
+
+def get_host(servers):
+  """ 
+  Returns the server information from config.yaml for the 
+  hostname specified on the command line.  If the hostnaem 
+  is in the format "user@hostname" then separate the 
+  hostname first
+  """
+
+  host = env.host_string
+  if host.find('@') > -1:
+    index = host.index('@')
+    index = index + 1
+    port = host.find(':')
+    if port > -1 < len(host):
+      host = host[index:port]
+    else:
+      host = host[index:]
+  return servers[host]
+
 @task
 def set_hosts():
   role_env = env.roles
@@ -75,28 +94,28 @@ def hello():
   run('echo hello')
 
 # Actual flannel
-def check_for_wp_cli(role):
-  cli = role['wp-cli']
+def check_for_wp_cli(host):
+  cli = host['wp-cli']
   if cli is None:
     return sys.exit(red('No wp-cli specified in config.yaml. Please add the path to wp for this server.'))
   if not files.exists(cli):
     return sys.exit(red('WP does not exist in the %s directory. Please install wp-cli, it\'s damn handy!' % server))
   return True
 
-def install_wordpress(version, role):
+def install_wordpress(version, host):
   if version == 'latest':
     try:
-      sudo('wp core update --allow-root')
+      sudo("wp core update --allow-root")
       print(cyan('WordPress installed successfully, moving on to configuration.'))
     except SystemExit:
       return sys.exit(red('WordPress core failed to install. Usually this is a network problem.'))
   else:
-    v = sudo('wp core version --allow-root')
+    v = sudo("wp core version --allow-root")
     if version == v:
       puts(cyan('WordPress is installed at the correct version, no need to update.'))
     else:
       try:
-        sudo('wp core update --version=%s --force --allow-root')
+        sudo("wp core update --version=%s --force --allow-root" % version)
         v = sudo('wp core version --allow-root')
         if v == version:
           print('WordPress installed successfully at version %s, moving on to configuration.' % v)
@@ -104,7 +123,7 @@ def install_wordpress(version, role):
           sys.exit(red('Something went wrong. Exepcted WordPress at %s but was %s.' % (version, v)))
       except SystemExit:
         return sys.exit(red('WordPress failed to update!'))
-  wp_config = role['wp-config']
+  wp_config = host['wp-config']
   try:
     sudo('cp -R %s configurations' % (wp_config))
     sudo('chmod -R +x configurations')
@@ -118,12 +137,12 @@ def git_stash_and_fetch(branch):
   sudo('git fetch origin')
   sudo('git checkout origin/%s' % (branch))
 
-def install_extension(extn, role):
+def install_extension(extn, host):
   extension = plugin_or_theme(extn)
   failures = []
   for p in extension:
-    if role.has_key('version'):
-      v = role['version']
+    if host.has_key('version'):
+      v = host['version']
     else:
       v = extension[p]['version']
     if extension[p]['src'] != False:
@@ -317,32 +336,30 @@ def migrate_settings(target):
 
 @task
 def deploy(wp_version='', plugin_override=False, theme_override=False):
-  roles = get_roles()
-  set_hosts()
-  role = get_current_role(env.host)
-  role = roles[role]
-  wp_dir = role['wordpress']
-  env.user = role['user']
+  servers = get_servers()
+  host = get_host(servers)
+  wp_dir = host['wordpress']
+  env.user = host['user']
   env.use_ssh_config = True
-  wp_cli = check_for_wp_cli(role)
+  wp_cli = check_for_wp_cli(host)
   themes = get_themes()
   plugins = get_plugins()
   config = get_config()
-  sudoer = role['sudo_user']
+  sudoer = host['sudo_user']
   failures = []
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     try:
       sudo('cp -R %s /tmp/build' % wp_dir)
     except SystemExit:
       sudo('mkdir /tmp/build')
-    with cd('/tmp/build'):
+    with cd('/tmp/build/wordpress'):
       if wp_version != 'latest':
-        wp_version = config['Application']['WordPress']['version']
-      install_wordpress(wp_version, role)
+        wp_version = config['Application']['WordPress']['version']  
+      install_wordpress(wp_version, host)
       if plugins is not None:
-        plugins_f = install_extension(extn='plugin', role=role)
+        plugins_f = install_extension(extn='plugin', host=host)
       if themes is not None:
-        themes_f = install_extension(extn='theme', role=role)
+        themes_f = install_extension(extn='theme', host=host)
   if len(plugins_f) > 0:
     failures.append(plugins_f)
   if len(themes_f) > 0:
@@ -363,6 +380,5 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
       activate_extensions(extn='theme')
 
 @task
-@roles('vagrant', 'build', 'content', 'prod')
 def build(wp_version=''):
   deploy(wp_version='')
