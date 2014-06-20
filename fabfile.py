@@ -378,7 +378,7 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
     # with cd(wp_dir):
     #   toggle_extensions()
     
-    #sudo('rm -rf /mnt/local/tmp/build')
+    sudo('rm -rf /mnt/local/tmp/build')
     with cd(wp_dir):
       activate_extensions(extn='plugin')
       activate_extensions(extn='theme')
