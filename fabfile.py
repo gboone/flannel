@@ -351,10 +351,10 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
   failures = []
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     try:
-      sudo('cp -R %s /mnt/local/tmp/build' % wp_dir)
+      sudo('cp -R %s /mnt/local/tmp/build/wordpress' % wp_dir)
     except SystemExit:
       sudo('mkdir -p /mnt/local/tmp/build')
-      sudo('cp -R %s /mnt/local/tmp/build' % wp_dir)
+      sudo('cp -R %s /mnt/local/tmp/build/wordpress' % wp_dir)
     with cd('/mnt/local/tmp/build/wordpress'):
       if wp_version != 'latest':
         wp_version = config['Application']['WordPress']['version']  
