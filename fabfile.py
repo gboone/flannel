@@ -161,17 +161,18 @@ def install_all_extensions(type, host):
   return failures
 
 def install_extension(name, type, src, version, user=None):
-    if src != False:
+    if src == 'wordpress':
+      install_extension_from_wp(type, name, version)
+    else:
       vcs = get_vcs()
       url = vcs[src]['url']
       if user is not None:
         vcs_user = user
       else: 
         vcs_user = vcs[src]['user']
-      
       install_extension_from_config(name, type, url, version, vcs_user)
-    else:
-      install_extension_from_wp(type, name, version)
+    puts(green("Successfully installed %s %s" % (type, name)))
+      
 
 def install_extension_from_config(name, type, url, version, vcs_user):
   with cd('wp-content/%ss' % (type)):
@@ -193,35 +194,55 @@ def git_stash_and_fetch(branch):
 
 def install_extension_from_wp(type, name, version):
   if version == 'master':
-    try:
-      sudo('wp %s is-installed %s --allow-root' % (type, name))
+    if is_extension_installed(type, name):
       sudo('wp %s update %s --allow-root' % (type, name))
-    except:
-      try:
-        sudo('wp %s install %s --allow-root' % (type, name))
-        puts(cyan('%s %s installed successfully.'))
-      except:
+    else:
+      install_cmd = sudo('wp %s install %s --allow-root' % (type, name))
+      if install_cmd.return_code == 0:
+        puts(green('%s %s installed successfully.'))
+      else:
         puts(red('%s %s could not install.' % (type, name)))
   else:
-    try:
-      sudo('wp %s is-installed %s --allow-root' % (type, name))
-      if version != sudo('wp %s get %s --field=version --allow-root' % (type, name)):
-        puts(cyan('Plugin not installed at correct version, reinstalling'))
-        sys.exit(1)
-    except SystemExit:
-      path = sudo('wp %s path %s --allow-root' % (type, name))
-      index = path.rfind('/')
-      path = path[:index]
-      sudo('rm -rf %s' % path)
+    if not is_extension_installed(type, name) or version != get_extension_version(type, name):
+      puts(cyan('Plugin not installed or installed at the incorrect version, reinstalling'))
+      uninstall_extension(type, name)      
       if type == 'plugin':
         url = 'http://downloads.wordpress.org/plugin/%s.%s.zip' % (name, version)
       elif type == 'theme':
         url = 'http://wordpress.org/themes/download/%s.%s.zip' % (name, version)
+      
       try:
-        sudo('wp %s install %s --allow-root' % (type, url))
+        install_cmd = sudo('wp %s install %s --allow-root' % (type, url))
+        if install_cmd.return_code == 0:
+          puts(green('%s %s installed successfully.' % (type, name)))
+        else:
+          puts(red('Failed to update %s' % name))
       except SystemExit:
-        puts(red('Failed to update %s' % p))
-        failures.append(p)
+        puts(red('Failed to update %s' % name))
+
+def is_extension_installed(type, name):
+  try:
+    result = sudo('wp %s is-installed %s --allow-root' % (type, name))
+    return result.return_code == 0
+  except SystemExit:
+    return False
+
+def get_extension_version(type, name):
+  return sudo('wp %s get %s --field=version --allow-root' % (type, name))
+
+def get_extension_path(type, name):
+  try:
+    path = sudo('wp %s path %s --allow-root' % (type, name))
+    index = path.rfind('/')
+    path = path[:index]
+    return path
+  except SystemExit:
+    return None
+
+def uninstall_extension(type, name):
+  path = get_extension_path(type, name)
+  if path is not None:
+    sudo('rm -rf %s' % path)
 
 def activate_all_extensions(type):
   extensions_list = get_plugin_or_theme_list(type)
@@ -406,7 +427,7 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
       activate_all_extensions(type='theme')
 
 @task
-def deploy_extension(extension_name, type, src, version, owner, state='active'):
+def deploy_extension(extension_name, type, src, version, owner=None, state='active'):
   servers = get_servers()
   host = get_host(servers)
   wp_dir = host['wordpress']
@@ -416,19 +437,14 @@ def deploy_extension(extension_name, type, src, version, owner, state='active'):
   wp_cli = check_for_wp_cli(host)
   sudoer = host['sudo_user']
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
-    # create a temporary directory to work in
-    sudo('mkdir -p %s/wordpress/wp-content/%ss' % (tmp_write_dir, type))
-
-    with cd('%s/wordpress' % tmp_write_dir):
+    with cd(wp_dir):
       try:
         install_extension(extension_name, type, src, version, owner)
-        puts(green("Successfully cloned %s, preparing to activate" % extension_name))
-        sudo('cp -RfT wp-content/%ss/%s %s/wordpress/wp-content/%ss/%s' % (type, extension_name, wp_dir, type, extension_name))
-        sudo('rm -rf %s' % tmp_write_dir)
+        activate_extension(extension_name, type)
       except SystemExit:
         sys.exit(red('Failed to install %s:' % extension_name))  
-    with cd(wp_dir):
-      activate_extension(extension_name, type)
+    
+      
 
 @task
 def deploy_wordpress(version):
