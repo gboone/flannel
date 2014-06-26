@@ -254,16 +254,14 @@ def uninstall_extension(type, name):
 #     activate_extension(extension, type)
 
 def activate_extension(name, type):
-  if is_extension_active(name, type):
+  if not is_extension_active(name, type):
     sudo('wp %s activate %s --allow-root' % (type, name))
 
 def is_extension_active(name, type):
   if type == 'theme':
     return sudo('wp option get template --allow-root') == name
   else:
-    result = sudo('wp plugin get %s --field=status --allow-root' % (name)) == 'active'
-    puts(cyan("return value: %s" % result))
-    return result
+    return sudo('wp plugin get %s --field=status --allow-root' % (name)) == 'active'
 
 # def get_plugin_or_theme_list(extn):
 #   if extn == 'plugin':
@@ -466,20 +464,6 @@ def deploy_wordpress(version):
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     with cd(wp_dir):
       install_wordpress(version, host)
-
-@task
-def is_extension_active_test(name, type):
-  servers = get_servers()
-  host = get_host(servers)
-  wp_dir = host['wordpress']
-  tmp_write_dir = host['tmp_write_dir'] if 'tmp_write_dir' in host else '/tmp/build'
-  env.user = host['user']
-  env.use_ssh_config = True
-  wp_cli = check_for_wp_cli(host)
-  sudoer = host['sudo_user']
-  with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
-    with cd(wp_dir):
-      print is_extension_active(name, type)
 
 @task
 def build(wp_version=''):
