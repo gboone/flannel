@@ -28,8 +28,10 @@ def get_servers():
 def get_plugins():
   data = get_config()
   if data.has_key('Plugins'):
+    print data['Plugins']
     return data['Plugins']
   else:
+    print 'I got nothing!'
     return None
 
 def get_vcs():
@@ -138,43 +140,45 @@ def install_wordpress(version, host):
 def is_correct_wordpress_version(version):
   return version == sudo("wp core version --allow-root")
 
-def install_all_extensions(type, host):
-  extensions_list = get_plugin_or_theme_list(type)
+def install_all_extensions(extensions_list, type, host):
   failures = []
-  for extension in extensions_list:
+  for extension, config in extensions_list.iteritems():
     # If a specific version is specified in config, use that. Otherwise
     # default to the version in the host (typically master)
-    if 'version' in extension:
-      version = extension['version']
+    if 'version' in config:
+      version = config['version']
     else:
       version = host['version']
-    src = extension['src']
+    src = config['src']
     
-    if 'vcs_user' in extension:
-      user = extension['vcs_user']
+    if 'vcs_user' in config:
+      user = config['vcs_user']
+    else:
+      user = ''
     
     try:
-      install_extension(extension, type, url, version, user)
+      install_extension(extension, type, src, version, user)
+      activate_extension(extension, type)
     except SystemExit:
       print(red('Failed to update %s' % extension))
       failures.append(extension)
   return failures
 
-def install_extension(name, type, src, version, user=None):
+def install_extension(name, type, src, version, user=''):
     if src == 'wordpress':
       install_extension_from_wp(type, name, version)
     else:
       vcs = get_vcs()
       url = vcs[src]['url']
-      if user is not None:
+      if user != '':
         vcs_user = user
       else: 
         vcs_user = vcs[src]['user']
-      install_extension_from_config(name, type, url, version, vcs_user)
+      install_extension_from_repo(name, type, url, version, vcs_user)
     puts(green("Successfully installed %s %s" % (type, name)))
       
 
-def install_extension_from_config(name, type, url, version, vcs_user):
+def install_extension_from_repo(name, type, url, version, vcs_user):
   with cd('wp-content/%ss' % (type)):
     if(not files.exists(name, use_sudo=True)):
       puts(cyan("Cloning %s" % name))
@@ -244,10 +248,10 @@ def uninstall_extension(type, name):
   if path is not None:
     sudo('rm -rf %s' % path)
 
-def activate_all_extensions(type):
-  extensions_list = get_plugin_or_theme_list(type)
-  for extension in extensions_list:
-    activate_extension(extension, type)
+# def activate_all_extensions(type):
+#   extensions_list = get_plugin_or_theme_list(type)
+#   for extension in extensions_list:
+#     activate_extension(extension, type)
 
 def activate_extension(name, type):
   if is_extension_active(name, type):
@@ -257,16 +261,18 @@ def is_extension_active(name, type):
   if type == 'theme':
     return sudo('wp option get template --allow-root') == name
   else:
-    return sudo('wp plugin get %s --field=status --allow-root' % (name)) == 'active'
+    result = sudo('wp plugin get %s --field=status --allow-root' % (name)) == 'active'
+    puts(cyan("return value: %s" % result))
+    return result
 
-def get_plugin_or_theme_list(extn):
-  if extn == 'plugin':
-    extensions_list = get_plugins()
-  elif extn == 'theme':
-    extensions_list = get_themes()
-  else:
-    sys.exit('Either plugin or theme must be set to True.')
-  return extensions_list
+# def get_plugin_or_theme_list(extn):
+#   if extn == 'plugin':
+#     extensions_list = get_plugins()
+#   elif extn == 'theme':
+#     extensions_list = get_themes()
+#   else:
+#     sys.exit('Either plugin or theme must be set to True.')
+#   return extensions_list
 
 def export_local_settings():
   with local('cd %s' % host['path-to-vagrant']):
@@ -379,7 +385,7 @@ def migrate_settings(target):
     sudo('git checkout %s' % environment)
 
 @task
-def deploy(wp_version='', plugin_override=False, theme_override=False):
+def deploy_from_config(wp_version='', plugin_override=False, theme_override=False):
   servers = get_servers()
   host = get_host(servers)
   wp_dir = host['wordpress']
@@ -397,15 +403,15 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
     sudo('mkdir -p %s' % tmp_write_dir)
 
     # copy the contents to a temporary working directory
-    sudo('cp -R %s %s/wordpress' % (wp_dir, tmp_write_dir))
+    sudo('rsync -ra --exclude=wordpress/f %s %s' % (wp_dir, tmp_write_dir))
     with cd('%s/wordpress' % tmp_write_dir):
       if wp_version != 'latest':
         wp_version = config['Application']['WordPress']['version']  
       install_wordpress(wp_version, host)
       if plugins is not None:
-        plugins_f = install_extension(extn='plugin', host=host)
+        plugins_f = install_all_extensions(plugins, 'plugin', host)
       if themes is not None:
-        themes_f = install_extension(extn='theme', host=host)
+        themes_f = install_all_extensions(themes, 'theme', host)
   if len(plugins_f) > 0:
     failures.append(plugins_f)
   if len(themes_f) > 0:
@@ -417,17 +423,18 @@ def deploy(wp_version='', plugin_override=False, theme_override=False):
   else:
     puts('All done, ready to copy!')
     with cd('%s/wordpress' % tmp_write_dir):
-      sudo('cp -RfT . %s' % wp_dir)
+      #sudo('cp -RfT . %s' % wp_dir)
+      sudo('rsync -ra . %s' % wp_dir)
     # with cd(wp_dir):
     #   toggle_extensions()
     
     sudo('rm -rf %s' % tmp_write_dir)
-    with cd(wp_dir):
-      activate_all_extensions(type='plugin')
-      activate_all_extensions(type='theme')
+    # with cd(wp_dir):
+    #   activate_all_extensions(type='plugin')
+    #   activate_all_extensions(type='theme')
 
 @task
-def deploy_extension(extension_name, type, src, version, owner=None, state='active'):
+def deploy_extension(extension_name, type, src, version, owner='', state='active'):
   servers = get_servers()
   host = get_host(servers)
   wp_dir = host['wordpress']
@@ -460,6 +467,19 @@ def deploy_wordpress(version):
     with cd(wp_dir):
       install_wordpress(version, host)
 
+@task
+def is_extension_active_test(name, type):
+  servers = get_servers()
+  host = get_host(servers)
+  wp_dir = host['wordpress']
+  tmp_write_dir = host['tmp_write_dir'] if 'tmp_write_dir' in host else '/tmp/build'
+  env.user = host['user']
+  env.use_ssh_config = True
+  wp_cli = check_for_wp_cli(host)
+  sudoer = host['sudo_user']
+  with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
+    with cd(wp_dir):
+      print is_extension_active(name, type)
 
 @task
 def build(wp_version=''):
