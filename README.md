@@ -68,7 +68,7 @@ Application:
 ```
 
 - Themes: names of themes that should be loaded as they are named by WordPress. For example the Twenty Fourteen theme is loaded with 'twentyfourteen'. Keys for each theme include:
-    - version: this can either be a numeric version for themes in the WordPress theme repository or a branch if loading from a VCS 
+    - version: this can either be a numeric version for themes in the WordPress theme repository or a branch if loading from a VCS
     - src: which VCS to find them in, set this to false if loading from the WP theme repository
     - state: if set to active, will mark this as the active theme for your site. You should have multiple themes here if you use a child theme. If more than one theme is set to active, the last one _Flannel_ iterates through will be loaded.
     - vcs_user: if a different user than the default for that VCS owns this theme, you can override it with this key
@@ -94,7 +94,7 @@ Better known as `fabfile.py`, the fabric file contains methods that make the fin
 Running the deployment
 ----------------------
 
-Simple: 
+Simple:
 1. `workon flannel`
 2. `fab deploy`
 
@@ -145,4 +145,13 @@ Servers:
     wp-config: /var/www/config
     sudo_user: root
     wp-cli: /path/to/wp
+```
+
+## Other tasks
+
+`backup`: exports your WordPress database to a file, requires `s3cmd` installed on the server and an s3 section in `config.yaml` that contains at least this much:
+
+```yaml
+s3:
+  sql: bucket-name
 ```

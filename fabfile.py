@@ -488,3 +488,4 @@ def backup():
       # put timestamp-backup.sql to <bucket>/<server>/2015/05/
       s3 = "s3://%s/%s/%s/%s/" % (bucket, server, today.year, today.month)
       run('s3cmd put %s %s' % (backupfile, s3))
+      run('rm %s' % backupfile)
