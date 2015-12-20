@@ -10,11 +10,12 @@ import datetime
 
 # Set up Flannel
 env.roledefs.update({
-  'vagrant': ['127.0.0.1'], 
+  'vagrant': ['127.0.0.1'],
   'build': [],
   'content' : [],
   'prod' : []
 })
+env.use_ssh_config = True
 # Read from YAML
 def get_config():
   config = file('config.yaml')
@@ -42,6 +43,10 @@ def get_themes():
   data = get_config()
   return data['Themes']
 
+def get_s3():
+  data = get_config()
+  return data['s3']
+
 def get_current_role(host):
   roles = get_roles()
   for r in roles:
@@ -52,13 +57,13 @@ def get_current_role(host):
       pass
 
 def get_host(servers):
-  """ 
-  Returns the server information from config.yaml for the 
-  hostname specified on the command line.  If the hostnaem 
-  is in the format "user@hostname" then separate the 
+  """
+  Returns the server information from config.yaml for the
+  hostname specified on the command line.  If the hostnaem
+  is in the format "user@hostname" then separate the
   hostname first
   """
-
+  import pdb; pdb.set_trace()
   host = env.host_string
   if host.find('@') > -1:
     index = host.index('@')
@@ -150,12 +155,12 @@ def install_all_extensions(extensions_list, type, host):
     else:
       version = host['version']
     src = config['src']
-    
+
     if 'vcs_user' in config:
       user = config['vcs_user']
     else:
       user = ''
-    
+
     try:
       install_extension(extension, type, src, version, user)
       activate_extension(extension, type)
@@ -172,18 +177,18 @@ def install_extension(name, type, src, version, user=''):
       url = vcs[src]['url']
       if user != '':
         vcs_user = user
-      else: 
+      else:
         vcs_user = vcs[src]['user']
       install_extension_from_repo(name, type, url, version, vcs_user)
     puts(green("Successfully installed %s %s" % (type, name)))
-      
+
 
 def install_extension_from_repo(name, type, url, version, vcs_user):
   with cd('wp-content/%ss' % (type)):
     if(not files.exists(name, use_sudo=True)):
       puts(cyan("Cloning %s" % name))
       git_clone(type, name, url, vcs_user)
-    
+
     with cd(name):
       git_stash_and_fetch(version)
 
@@ -209,12 +214,12 @@ def install_extension_from_wp(type, name, version):
   else:
     if not is_extension_installed(type, name) or version != get_extension_version(type, name):
       puts(cyan('Plugin not installed or installed at the incorrect version, reinstalling'))
-      uninstall_extension(type, name)      
+      uninstall_extension(type, name)
       if type == 'plugin':
         url = 'http://downloads.wordpress.org/plugin/%s.%s.zip' % (name, version)
       elif type == 'theme':
         url = 'http://wordpress.org/themes/download/%s.%s.zip' % (name, version)
-      
+
       try:
         install_cmd = sudo('wp %s install %s --allow-root' % (type, url))
         if install_cmd.return_code == 0:
@@ -404,7 +409,7 @@ def deploy_from_config(wp_version='', plugin_override=False, theme_override=Fals
     sudo('rsync -ra --exclude=wordpress/f %s %s' % (wp_dir, tmp_write_dir))
     with cd('%s/wordpress' % tmp_write_dir):
       if wp_version != 'latest':
-        wp_version = config['Application']['WordPress']['version']  
+        wp_version = config['Application']['WordPress']['version']
       install_wordpress(wp_version, host)
       if plugins is not None:
         plugins_f = install_all_extensions(plugins, 'plugin', host)
@@ -425,7 +430,7 @@ def deploy_from_config(wp_version='', plugin_override=False, theme_override=Fals
       sudo('rsync -ra . %s' % wp_dir)
     # with cd(wp_dir):
     #   toggle_extensions()
-    
+
     sudo('rm -rf %s' % tmp_write_dir)
     # with cd(wp_dir):
     #   activate_all_extensions(type='plugin')
@@ -447,9 +452,7 @@ def deploy_extension(extension_name, type, src, version, owner='', state='active
         install_extension(extension_name, type, src, version, owner)
         activate_extension(extension_name, type)
       except SystemExit:
-        sys.exit(red('Failed to install %s:' % extension_name))  
-    
-      
+        sys.exit(red('Failed to install %s:' % extension_name))
 
 @task
 def deploy_wordpress(version):
@@ -460,7 +463,7 @@ def deploy_wordpress(version):
   env.use_ssh_config = True
   sudoer = host['sudo_user']
   wp_cli = check_for_wp_cli(host)
-  
+
   with settings(path=wp_cli, behavior='append', sudo_user=sudoer):
     with cd(wp_dir):
       install_wordpress(version, host)
@@ -468,3 +471,20 @@ def deploy_wordpress(version):
 @task
 def build(wp_version=''):
   deploy(wp_version='')
+
+@task
+def backup():
+  servers = get_servers()
+  today = datetime.date.today()
+  time = "%s%s%s" % (today.year, today.month, today.day)
+  bucket = get_s3()['sql']
+  for server in servers:
+    host = servers[server]
+    # name file timestamp-backup.sql
+    backupfile = "%s-backup.sql" % time
+    with cd(host['wp-config']):
+      run('wp db export ~/%s' % backupfile)
+    with cd('/home/%s' % host['user']):
+      # put timestamp-backup.sql to <bucket>/<server>/2015/05/
+      s3 = "s3://%s/%s/%s/%s/" % (bucket, server, today.year, today.month)
+      run('s3cmd put %s %s' % (backupfile, s3))
